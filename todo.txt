@@ -1,0 +1,7 @@
+- Stop integration ater n crossings
+---> need to rewrite own version of solve_ivp that handles events differently
+---> can copy some parts and discard the ones not needed ?
+---> maybe implement chvar method of Pfenniger to calculate crossing point as precisely as possible
+x Show orbit by clicking on poincaré line DONE
+- Test jacobian computation method & begin periodic orbit finder method
+
