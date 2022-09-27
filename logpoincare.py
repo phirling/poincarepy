@@ -18,9 +18,13 @@ If the --fill flag is passed, the program calculates a given number of orbits wh
 on the x axis (with vx=0) and then becomes interactive, where clicking on a poincaré curve shows its corresponding
 orbit in xy-space on the right.
 
-For the integration duration, the user can either (default) specify a number of crossings of the y plane (i.e. a number
+To set the integration time, the user can either (default) specify a number of crossings of the y plane (i.e. a number
 of points in the Poincaré map), in which case the -tf argument is used as an upper limit or timeout to the integration time,
 or the user can specify --no_count in which case the integration will keep going until tf is reached.
+
+== Work in progress: ==
+The --jac flag in interactive mode: for calculating the jacobian and eventually find periodic orbits
+
 '''
 
 parser.add_argument("-v0",type=float,default=10.,help="Characteristic Velocity")
@@ -28,7 +32,7 @@ parser.add_argument("-rc",type=float,default=1.,help="Characteristic Radius")
 parser.add_argument("-q",type=float,default=0.8,help="Flattening Parameter")
 parser.add_argument("-E",type=float,default=80,help="Energy of Orbit")
 
-parser.add_argument("--jac",action='store_true',help="Compute the Jacobian")
+parser.add_argument("--jac",action='store_true',help="Compute the Jacobian & find periodic orbits near starting point")
 
 parser.add_argument("-tf",type=float,default=100,help="Maximal integration time. If --no_count, this will be the obligatory final time")
 parser.add_argument("--no_count",action='store_true',help="Integrate until t=tf, without counting the crossings")
@@ -38,7 +42,8 @@ parser.add_argument("-nb_orbs",type=int,default=11,help="Number of orbits to sam
 
 args = parser.parse_args()
 
-# Define Physical System
+# Define Physical System. The potential is implemented as a class in view of modularity,
+# since eventually multiple potentials may be added
 G = 4.299581e04
 class LogarithmicPotential:
     def __init__(self,v0,rc,q):
@@ -59,9 +64,6 @@ class LogarithmicPotential:
     # xdot = ydot = y = 0
     def maxval_x(self,E):
         return np.sqrt(np.exp(2*E/self.v0**2)-self.rc**2)
-    # xdot = ydot = x = 0
-    def maxval_y(self,E):
-        return np.sqrt(np.exp(2*E/self.v0**2)-self.rc**2) * self.q
 
 pot = LogarithmicPotential(args.v0,args.rc,args.q)
 
@@ -118,6 +120,7 @@ t_eval = np.linspace(0,tf,nb_points_orbit) # ts at which the output of the integ
                                            # in reality, integration normally stops before tf
                                            # (if a the given number of crossings is reached)
                                            # and so a large part of these ts will not be used.
+# Decide whether to terminate integration after N crossings or integrate until tf
 if args.no_count:
     event_count_max = None
 else:
@@ -136,10 +139,13 @@ def vy(x,vx):
     else:
         return np.sqrt(ED)
 
-# Main program: either single-map interactive mode or auto-filled multi-map mode
+
+
+
+''' ###### Main program: either single-map interactive mode (1) or auto-filled multi-map mode (2) ####### '''
+
 # Mode 1:
 if not args.fill:
-
     txt.set_text('Click on a point\nto start')
 
     # Create empty lines in both panels
@@ -149,13 +155,12 @@ if not args.fill:
     # Picking function used to get initial x, vx from user input
     def onpick(event):
         if event.inaxes == ax[0]:
-            # x, xdot IC
             x, xdot = event.xdata, event.ydata
-
             ydot = vy(x,xdot)
+
             if ydot is not None:
                 y0 = [x,0,xdot,ydot] 
-                #res = scpint.solve_ivp(RHS,tsp,y0,t_eval=t_eval,method='DOP853',events=event_yplanecross)
+                #res = scpint.solve_ivp(RHS,tsp,y0,t_eval=t_eval,method='DOP853',events=event_yplanecross) # old integrator (scipy)
                 res = solver.integrate_orbit(RHS,t_span,y0,t_eval=t_eval,events=event_yplanecross,event_count_end=event_count_max)
 
                 # Orbit Output
@@ -253,10 +258,12 @@ if not args.fill:
                             deltq = delta_qn(qn)['x']
                             qn += deltq
                             if ii > maxiter:
-                                print("Did not converge")
+                                print("Maximum number of iterations reached")
                                 break
                         print("Converged to a periodic orbit after " + str(ii) + " iterations:")
                         print("[x,vx] = [{:.3e},{:.3e}]".format(qn[0],qn[1]))
+                        txt.set_text('Converged to a periodic orbit\nafter {:.0f} iterations:\n[x,vx] = [{:.1e},{:.1e}]'.format(ii,qn[0],qn[1]))
+                        ax[1].set_title('Found periodic orbit')
                         #print("[x,y,vx,vy] = [{:.3e},0,{:.3e},{:.3e}]".format(qn[0],qn[1],vy(qn[0],qn[1])))
                         return qn
                     
@@ -274,6 +281,8 @@ if not args.fill:
                     line_sections.set_ydata(Xdot)
                     line_orbits.set_xdata(xx)
                     line_orbits.set_ydata(yy)
+
+                    
                     fig.canvas.draw()
             else:
                 print("Point outside of zero-velocity curve")
