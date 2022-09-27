@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.integrate._ivp.rk import DOP853
-from scipy.integrate._ivp.ivp import prepare_events, handle_events, find_active_events
+from scipy.integrate._ivp.ivp import prepare_events, handle_events, find_active_events, OdeResult
 from scipy.optimize import OptimizeResult
 
 '''
@@ -117,4 +117,4 @@ def integrate_orbit(fun, t_span, y0, t_eval=None, events=None,event_count_end = 
         ys = np.hstack(ys)
 
 
-    return OptimizeResult(t=ts,y=ys,t_events = t_events, y_events = y_events,status=status)
+    return OdeResult(t=ts,y=ys,t_events = t_events, y_events = y_events,status=status)

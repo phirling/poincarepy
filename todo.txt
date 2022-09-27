@@ -5,3 +5,4 @@
 x Show orbit by clicking on poincaré line DONE
 - Test jacobian computation method & begin periodic orbit finder method
 
+- Find a more elegant solution for t_eval: one for the nb_crossings mode and one for the other

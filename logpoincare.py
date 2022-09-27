@@ -1,3 +1,4 @@
+from logging import root
 import numpy as np
 import matplotlib.pyplot as plt
 import scipy.integrate as scpint
@@ -161,9 +162,43 @@ if not args.fill:
 
                 # TODO: Compute jacobian etc
                 if args.jac:
-                    ddiv = 1000000.
+                    # One can view the poincaré section as a map from K --> K where K is the phase space. The map is the phase space
+                    # position of the body at the moment it crosses the y=0 plane for the first time. Thus, poincare_map(y0) will
+                    # always yield a result of the form [x,0,vx,vy]
+                    def poincare_map(y0):
+                        res = solver.integrate_orbit(RHS,t_span,y0,events=event_yplanecross,event_count_end=2)
+                        return res['y_events'][0][1] # <- [0] selects the event type (only one), [1] is the first occurence (0 is the start)
+
+                    # Most of the time, we are interested only in the restricted map T: (x,vx) --> (x,vx)
+                    def poincare_map_restr(y0):
+                        return poincare_map(y0)[[0,2]]
+
+                    # The jacobian matrix of the map can be computed numerically by finite differences (back&forward)
+                    def num_jacobian(y0,dx,dvx):
+                        y0xf   = np.add(y0,[dx,0,0,0])      #[x+dx,y,xdot,ydot]
+                        y0xb   = np.add(y0,[-dx,0,0,0])     #[x-dx,y,xdot,ydot]
+                        y0vxf  = np.add(y0,[0,0,dvx,0])     #[x,y,xdot+dxdot,ydot]
+                        y0vxb  = np.add(y0,[0,0,-dvx,0])    #[x,y,xdot-dxdot,ydot]
+
+                        Txf = poincare_map_restr(y0xf)
+                        Txb = poincare_map_restr(y0xb)
+                        Tvxf = poincare_map_restr(y0vxf)
+                        Tvxb = poincare_map_restr(y0vxb)
+
+                        J00 = (Txf[0] - Txb[0]) / (2*dx)
+                        J01 = (Tvxf[0] - Tvxb[0]) / (2*dxdot)
+                        J10 = (Txf[1] - Txb[1]) / (2*dx)
+                        J11 = (Tvxf[1] - Tvxb[1]) / (2*dxdot)
+
+                        jac_matrix = np.array([[J00,J01],[J10,J11]])
+                        return jac_matrix
+
+                    ddiv = 10000.
                     dx = abs(x/ddiv)
                     dxdot = abs(xdot/ddiv)
+
+                    '''
+                    Version with only forward
                     y01 = [x+dx,y,xdot,ydot]
                     y02 = [x,y,xdot+dxdot,ydot]
                     res01 = scpint.solve_ivp(RHS,t_span,y01,method='DOP853',events=event_yplanecross)
@@ -180,6 +215,40 @@ if not args.fill:
 
                     Jac = np.array([[J00,J01],[J10,J11]])
                     print(Jac)
+                    
+
+                    y0xf   = [x+dx,y,xdot,ydot]
+                    y0xb   = [x-dx,y,xdot,ydot]
+                    y0vxf  = [x,y,xdot+dxdot,ydot]
+                    y0vxb  = [x,y,xdot-dxdot,ydot]
+                    resxf  = solver.integrate_orbit(RHS,t_span,y0xf,events=event_yplanecross,event_count_end=2)
+                    resxb  = solver.integrate_orbit(RHS,t_span,y0xb,events=event_yplanecross,event_count_end=2)
+                    resvxf = solver.integrate_orbit(RHS,t_span,y0vxf,events=event_yplanecross,event_count_end=2)
+                    resvxb = solver.integrate_orbit(RHS,t_span,y0vxb,events=event_yplanecross,event_count_end=2)
+
+                    yevsxf  = resxf['y_events'][0]
+                    yevsxb  = resxb['y_events'][0]
+                    yevsvxf = resvxf['y_events'][0]
+                    yevsvxb = resvxb['y_events'][0]
+
+                    ii = 1 # <- after 1 crossing
+                    J00 = (yevsxf[ii,0] - yevsxb[ii,0])/(2*dx)
+                    J01 = (yevsvxf[ii,0] - yevsvxb[ii,0])/(2*dxdot)
+                    J10 = (yevsxf[ii,2] - yevsxb[ii,2])/(2*dx)
+                    J11 = (yevsvxf[ii,2] - yevsvxb[ii,2])/(2*dxdot)
+
+                    #J00 = (yevs01[:,0][ii] - yevs[:,0][ii])/ dx
+                    #J01 = (yevs01[:,2][ii] - yevs[:,2][ii])/ dx
+                    #J10 = (yevs02[:,0][ii] - yevs[:,0][ii])/ dxdot
+                    #J11 = (yevs02[:,2][ii] - yevs[:,2][ii])/ dxdot
+
+                    #print(yevsxf[ii,0])
+                    Jac = np.array([[J00,J01],[J10,J11]])
+                    #print(Jac)
+                    '''
+                    #J = num_jacobian(y0,dx,dxdot)
+                    #jacnum_det = J[0,0]*J[1,1] - J[0,1]*J[1,0]
+                    #print(jacnum_det)
 
                 # Plot Poincaré section & Orbit in xy space
                 line_sections.set_xdata(X)
