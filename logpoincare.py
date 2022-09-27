@@ -114,7 +114,10 @@ ax[1].set_ylim(-llim,llim)
 tf = args.tf
 t_span = (0,tf)
 nb_points_orbit = 20000
-t_eval = np.linspace(0,tf,nb_points_orbit) # <-- TODO: more efficient solution here
+t_eval = np.linspace(0,tf,nb_points_orbit) # ts at which the output of the integrator is stored.
+                                           # in reality, integration normally stops before tf
+                                           # (if a the given number of crossings is reached)
+                                           # and so a large part of these ts will not be used.
 if args.no_count:
     event_count_max = None
 else:
@@ -124,6 +127,14 @@ else:
 def event_yplanecross(t,y):
     return y[1]
 event_yplanecross.direction = 1
+
+# To calculate vy from x,vx
+def vy(x,vx):
+    ED = 2*(args.E-pot.potential([x,0])) - vx**2
+    if ED < 0:
+        return None
+    else:
+        return np.sqrt(ED)
 
 # Main program: either single-map interactive mode or auto-filled multi-map mode
 # Mode 1:
@@ -140,14 +151,10 @@ if not args.fill:
         if event.inaxes == ax[0]:
             # x, xdot IC
             x, xdot = event.xdata, event.ydata
-            # Orbit starts on y=0 plane
-            y = 0
 
-            # Calculate ydot from fixed E and x, xdot
-            ED = 2*(args.E-pot.potential([x,y])) - xdot**2
-            if ED >= 0:
-                ydot = np.sqrt(ED)
-                y0 = [x,y,xdot,ydot] 
+            ydot = vy(x,xdot)
+            if ydot is not None:
+                y0 = [x,0,xdot,ydot] 
                 #res = scpint.solve_ivp(RHS,tsp,y0,t_eval=t_eval,method='DOP853',events=event_yplanecross)
                 res = solver.integrate_orbit(RHS,t_span,y0,t_eval=t_eval,events=event_yplanecross,event_count_end=event_count_max)
 
@@ -160,96 +167,6 @@ if not args.fill:
                 X = yevs[:,0]
                 Xdot = yevs[:,2]
 
-                # TODO: Compute jacobian etc
-                if args.jac:
-                    # One can view the poincaré section as a map from K --> K where K is the phase space. The map is the phase space
-                    # position of the body at the moment it crosses the y=0 plane for the first time. Thus, poincare_map(y0) will
-                    # always yield a result of the form [x,0,vx,vy]
-                    def poincare_map(y0):
-                        res = solver.integrate_orbit(RHS,t_span,y0,events=event_yplanecross,event_count_end=2)
-                        return res['y_events'][0][1] # <- [0] selects the event type (only one), [1] is the first occurence (0 is the start)
-
-                    # Most of the time, we are interested only in the restricted map T: (x,vx) --> (x,vx)
-                    def poincare_map_restr(y0):
-                        return poincare_map(y0)[[0,2]]
-
-                    # The jacobian matrix of the map can be computed numerically by finite differences (back&forward)
-                    def num_jacobian(y0,dx,dvx):
-                        y0xf   = np.add(y0,[dx,0,0,0])      #[x+dx,y,xdot,ydot]
-                        y0xb   = np.add(y0,[-dx,0,0,0])     #[x-dx,y,xdot,ydot]
-                        y0vxf  = np.add(y0,[0,0,dvx,0])     #[x,y,xdot+dxdot,ydot]
-                        y0vxb  = np.add(y0,[0,0,-dvx,0])    #[x,y,xdot-dxdot,ydot]
-
-                        Txf = poincare_map_restr(y0xf)
-                        Txb = poincare_map_restr(y0xb)
-                        Tvxf = poincare_map_restr(y0vxf)
-                        Tvxb = poincare_map_restr(y0vxb)
-
-                        J00 = (Txf[0] - Txb[0]) / (2*dx)
-                        J01 = (Tvxf[0] - Tvxb[0]) / (2*dxdot)
-                        J10 = (Txf[1] - Txb[1]) / (2*dx)
-                        J11 = (Tvxf[1] - Tvxb[1]) / (2*dxdot)
-
-                        jac_matrix = np.array([[J00,J01],[J10,J11]])
-                        return jac_matrix
-
-                    ddiv = 10000.
-                    dx = abs(x/ddiv)
-                    dxdot = abs(xdot/ddiv)
-
-                    '''
-                    Version with only forward
-                    y01 = [x+dx,y,xdot,ydot]
-                    y02 = [x,y,xdot+dxdot,ydot]
-                    res01 = scpint.solve_ivp(RHS,t_span,y01,method='DOP853',events=event_yplanecross)
-                    res02 = scpint.solve_ivp(RHS,t_span,y02,method='DOP853',events=event_yplanecross)
-
-                    yevs01 = res01['y_events'][0]
-                    yevs02 = res02['y_events'][0]
-
-                    ii = 1
-                    J00 = (yevs01[:,0][ii] - yevs[:,0][ii])/ dx
-                    J01 = (yevs01[:,2][ii] - yevs[:,2][ii])/ dx
-                    J10 = (yevs02[:,0][ii] - yevs[:,0][ii])/ dxdot
-                    J11 = (yevs02[:,2][ii] - yevs[:,2][ii])/ dxdot
-
-                    Jac = np.array([[J00,J01],[J10,J11]])
-                    print(Jac)
-                    
-
-                    y0xf   = [x+dx,y,xdot,ydot]
-                    y0xb   = [x-dx,y,xdot,ydot]
-                    y0vxf  = [x,y,xdot+dxdot,ydot]
-                    y0vxb  = [x,y,xdot-dxdot,ydot]
-                    resxf  = solver.integrate_orbit(RHS,t_span,y0xf,events=event_yplanecross,event_count_end=2)
-                    resxb  = solver.integrate_orbit(RHS,t_span,y0xb,events=event_yplanecross,event_count_end=2)
-                    resvxf = solver.integrate_orbit(RHS,t_span,y0vxf,events=event_yplanecross,event_count_end=2)
-                    resvxb = solver.integrate_orbit(RHS,t_span,y0vxb,events=event_yplanecross,event_count_end=2)
-
-                    yevsxf  = resxf['y_events'][0]
-                    yevsxb  = resxb['y_events'][0]
-                    yevsvxf = resvxf['y_events'][0]
-                    yevsvxb = resvxb['y_events'][0]
-
-                    ii = 1 # <- after 1 crossing
-                    J00 = (yevsxf[ii,0] - yevsxb[ii,0])/(2*dx)
-                    J01 = (yevsvxf[ii,0] - yevsvxb[ii,0])/(2*dxdot)
-                    J10 = (yevsxf[ii,2] - yevsxb[ii,2])/(2*dx)
-                    J11 = (yevsvxf[ii,2] - yevsvxb[ii,2])/(2*dxdot)
-
-                    #J00 = (yevs01[:,0][ii] - yevs[:,0][ii])/ dx
-                    #J01 = (yevs01[:,2][ii] - yevs[:,2][ii])/ dx
-                    #J10 = (yevs02[:,0][ii] - yevs[:,0][ii])/ dxdot
-                    #J11 = (yevs02[:,2][ii] - yevs[:,2][ii])/ dxdot
-
-                    #print(yevsxf[ii,0])
-                    Jac = np.array([[J00,J01],[J10,J11]])
-                    #print(Jac)
-                    '''
-                    #J = num_jacobian(y0,dx,dxdot)
-                    #jacnum_det = J[0,0]*J[1,1] - J[0,1]*J[1,0]
-                    #print(jacnum_det)
-
                 # Plot Poincaré section & Orbit in xy space
                 line_sections.set_xdata(X)
                 line_sections.set_ydata(Xdot)
@@ -260,6 +177,104 @@ if not args.fill:
                 # Show info
                 txt.set_text('IC:\n$x=$ {:.2f} kpc\n$v_x=$ {:.2f} km/s\n$v_y=$ {:.2f} km/s'.format(x,xdot,ydot))
                 fig.canvas.draw()
+
+                # TODO: THIS SECTION IS FOR TESTING THE JACOBIAN COMPUTATION
+                if args.jac:
+                    # One can view the poincaré section as a map from K --> K where K is the phase space. The map is the phase space
+                    # position of the body at the moment it crosses the y=0 plane after one turn. Since y=0 in K and vy is determinable,
+                    # in reality the poincare map can be seen as a 2D map from (x,vx) to (x,vx)
+                    def poincare_map(q): # here q = [x,vx] is a 2d vector
+                        ydot = vy(q[0],q[1])
+                        if ydot is not None:
+                            y0 = [q[0],0,q[1],ydot] # <- the integrator still needs a 4d vector
+                            res = solver.integrate_orbit(RHS,t_span,y0,events=event_yplanecross,event_count_end=2)
+                            # [0] selects the event type (only one), [1] is the first occurence (0 is the start), [[0,2]] returns only x,vx
+                            return res['y_events'][0][1][[0,2]] 
+                        else:
+                            raise ValueError("blabla")
+                    
+                    # Jacobian of the 2d poincare map using finite differences
+                    def jacobian_num(x,vx,dx,dvx):
+                        Txf = poincare_map([x+dx,vx])
+                        Txb = poincare_map([x-dx,vx])
+                        Tvxf = poincare_map([x,vx+dvx])
+                        Tvxb = poincare_map([x,vx-dvx])
+
+                        J00 = (Txf[0] - Txb[0]) / (2*dx)
+                        J01 = (Tvxf[0] - Tvxb[0]) / (2*dxdot)
+                        J10 = (Txf[1] - Txb[1]) / (2*dx)
+                        J11 = (Tvxf[1] - Tvxb[1]) / (2*dxdot)
+
+                        jac_matrix = np.array([[J00,J01],[J10,J11]])
+                        return jac_matrix
+                    
+                    # We also implement the poincare_map method in the full 4d space for future convenience
+                    def poincare_map_4d(y):
+                        res = solver.integrate_orbit(RHS,t_span,y,events=event_yplanecross,event_count_end=2)
+                        return res['y_events'][0][1] # <- [0] selects the event type (only one), [1] is the first occurence (0 is the start)
+
+                    # Example values for finite differences
+                    ddiv = 10000.
+                    dx = abs(x/ddiv)
+                    dxdot = abs(xdot/ddiv)
+
+                    ###### TESTS ######
+                    q = np.array([x,xdot])
+                    F = lambda q: poincare_map(q) - q
+                    dF = lambda q: jacobian_num(q[0],q[1],dx,dxdot) - np.identity(2)
+                    
+                    import scipy.optimize as opt
+
+                    # Test1: The nnls method does not converge
+                    #def delta(q):
+                    #    F = poincare_map(q) - q
+                    #    dF = jacobian_num(q[0],q[1],dx,dxdot) - np.identity(2)
+                    #    delta, resid = opt.nnls(dF,-F)
+                    #    return delta,resid
+
+                    # Test2: The scipy root finding methods work, but only find the solution at the origin
+                    #print(opt.root(F,q,jac=dF))
+                    #print(opt.fsolve(F,q,fprime=dF))
+
+                    # Working method: use lsq_linear to find dq as in Pfenniger92
+                    def delta_qn(q):
+                        A = dF(q)
+                        b = F(q)
+                        return opt.lsq_linear(A,-b)
+
+                    EPS = 1e-5
+
+                    def find_periodic_orbit(q0,eps,maxiter):
+                        ii = 0
+                        qn = q0
+                        deltq = q
+                        while np.linalg.norm(deltq) > eps:
+                            ii += 1
+                            deltq = delta_qn(qn)['x']
+                            qn += deltq
+                            if ii > maxiter:
+                                print("Did not converge")
+                                break
+                        print("Converged to a periodic orbit after " + str(ii) + " iterations:")
+                        print("[x,vx] = [{:.3e},{:.3e}]".format(qn[0],qn[1]))
+                        #print("[x,y,vx,vy] = [{:.3e},0,{:.3e},{:.3e}]".format(qn[0],qn[1],vy(qn[0],qn[1])))
+                        return qn
+                    
+                    q_per = find_periodic_orbit(q,EPS,100)
+
+                    # Plot result
+                    yq = [q_per[0],0.,q_per[1],vy(q_per[0],q_per[1])]
+                    resnew = solver.integrate_orbit(RHS,t_span,yq,t_eval=t_eval,events=event_yplanecross,event_count_end=event_count_max)
+                    xx = resnew['y'][0]
+                    yy = resnew['y'][1]
+                    yevs = resnew['y_events'][0]
+                    X = yevs[:,0]
+                    Xdot = yevs[:,2]
+                    line_sections.set_xdata(X)
+                    line_sections.set_ydata(Xdot)
+                    line_orbits.set_xdata(xx)
+                    line_orbits.set_ydata(yy)
+                    fig.canvas.draw()
             else:
                 print("Point outside of zero-velocity curve")
 
@@ -334,3 +349,39 @@ else:
         Picker.append_section(secline)
 
 plt.show()
+
+
+
+'''
+---------- Old code ---------
+# One can view the poincaré section as a map from K --> K where K is the phase space. The map is the phase space
+# position of the body at the moment it crosses the y=0 plane for the first time. Thus, poincare_map(y0) will
+# always yield a result of the form [x,0,vx,vy]
+def poincare_map(y0):
+    res = solver.integrate_orbit(RHS,t_span,y0,events=event_yplanecross,event_count_end=2)
+    return res['y_events'][0][1] # <- [0] selects the event type (only one), [1] is the first occurence (0 is the start)
+
+# Most of the time, we are interested only in the restricted map T: (x,vx) --> (x,vx)
+def poincare_map_restr(y0):
+    return poincare_map(y0)[[0,2]]
+
+# The jacobian matrix of the map can be computed numerically by finite differences (back&forward)
+def num_jacobian(y0,dx,dvx):
+    y0xf   = np.add(y0,[dx,0,0,0])      #[x+dx,y,xdot,ydot]
+    y0xb   = np.add(y0,[-dx,0,0,0])     #[x-dx,y,xdot,ydot]
+    y0vxf  = np.add(y0,[0,0,dvx,0])     #[x,y,xdot+dxdot,ydot]
+    y0vxb  = np.add(y0,[0,0,-dvx,0])    #[x,y,xdot-dxdot,ydot]
+
+    Txf = poincare_map_restr(y0xf)
+    Txb = poincare_map_restr(y0xb)
+    Tvxf = poincare_map_restr(y0vxf)
+    Tvxb = poincare_map_restr(y0vxb)
+
+    J00 = (Txf[0] - Txb[0]) / (2*dx)
+    J01 = (Tvxf[0] - Tvxb[0]) / (2*dxdot)
+    J10 = (Txf[1] - Txb[1]) / (2*dx)
+    J11 = (Tvxf[1] - Tvxb[1]) / (2*dxdot)
+
+    jac_matrix = np.array([[J00,J01],[J10,J11]])
+    return jac_matrix
+'''

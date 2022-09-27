@@ -14,13 +14,18 @@ Newly added:
 The user can either specify a time span (ti,tf) for the integration OR specify a number of times a
 given event (typically a plane crossing) must happen for the integration to stop.
 
-Limitations (so far):
-Only deal with one event type.
+Please Note:
+The original solve_ivp can deal with multiple event types and outputs ys and ts for each type. The
+counting function implemented here assumes that only a single event is provided. If this is not
+the case, expect false behaviour. Nonetheless, since the event watching code is copied from the
+original solve_ivp, it still handles events as if multiple could be provided.
+TODO: either rewrite to make it explicit that only 1 event is watched OR implement a counting
+      that also works for multiple events.
 
 Parameters
 ---------
 fun: callable
-
+...
 '''
 
 # The following function is a remade version of solve_ivp, which reuses some parts of the original
@@ -115,6 +120,5 @@ def integrate_orbit(fun, t_span, y0, t_eval=None, events=None,event_count_end = 
     elif ts:
         ts = np.hstack(ts)
         ys = np.hstack(ys)
-
 
     return OdeResult(t=ts,y=ys,t_events = t_events, y_events = y_events,status=status)
