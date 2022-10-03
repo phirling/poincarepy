@@ -26,6 +26,7 @@ The --jac flag in interactive mode: for calculating the jacobian and eventually 
 
 '''
 
+parser.add_argument("-mode",type=str,default='interactive',help="Program mode (interactive, orbitfinder, fill, tomographic)")
 parser.add_argument("-v0",type=float,default=10.,help="Characteristic Velocity")
 parser.add_argument("-rc",type=float,default=1.,help="Characteristic Radius")
 parser.add_argument("-q",type=float,default=0.8,help="Flattening Parameter")
@@ -97,8 +98,8 @@ ax[1].set_title("Orbit in $xy$-plane")
 fig.suptitle('Logarithmic Potential, $q=$ {:.2f}, $E=$ {:.1f}'.format(args.q,args.E),fontsize=16)
 
 # Zero velocity curve in Poincaré space
-ax[0].plot(xsp,xdotsp)
-ax[0].plot(xsp,-xdotsp)
+#ax[0].plot(xsp,xdotsp)
+#[0].plot(xsp,-xdotsp)
 
 # Text box to hold information
 txt = ax[0].text(0.2, 0.9,'',
@@ -144,7 +145,7 @@ def vy(x,vx):
 ''' ###### Main program: either single-map interactive mode (1) or auto-filled multi-map mode (2) ####### '''
 
 # Mode 1:
-if not args.fill:
+if args.mode == "interactive" or args.mode == "orbitfinder":
     txt.set_text('Click on a point\nto start')
 
     # Create empty lines in both panels
@@ -183,7 +184,7 @@ if not args.fill:
                 fig.canvas.draw()
 
                 # TODO: THIS SECTION IS FOR TESTING THE JACOBIAN COMPUTATION
-                if args.jac:
+                if args.mode == "orbitfinder":
                     # One can view the poincaré section as a map from K --> K where K is the phase space. The map is the phase space
                     # position of the body at the moment it crosses the y=0 plane after one turn. Since y=0 in K and vy is determinable,
                     # in reality the poincare map can be seen as a 2D map from (x,vx) to (x,vx)
@@ -289,19 +290,16 @@ if not args.fill:
     fig.canvas.mpl_connect('button_press_event', onpick)
 
 # Mode 2: Draw a set of orbits in advance, show xy-orbit by clicking
-else:
-    # Create empty line in the right panel (the left panel will be filled)
-    line_orbits, = ax[1].plot([], [],lw=1)
-    
-    # Interactivity is handled by a class (cleaner & allows some visual touches like colorizing the picked curve)
+elif args.mode == "fill":
     class OrbitPicker:
-        def __init__(self,line_orbits):
-            self.line_orbits = line_orbits
+        def __init__(self,ax_poincare,ax_orbit,E):
+            self.line_orbits, = ax_orbit.plot([], [],lw=1)
             self.sections = [] # <- list of line2d objects: the poincaré sections in the left panel
             self.orbits_x = [] # <- list of arrays containing the x/y coords of the orbits
             self.orbits_y = [] #    These are plotted when the corresponding section in the left panel is clicked
             self.firstpick = True
-            line_orbits.figure.canvas.mpl_connect('pick_event',self)
+            self.E = E
+            ax_poincare.figure.canvas.mpl_connect('pick_event',self)
 
         def append_orbit(self,x,y):
             self.orbits_x.append(x)
@@ -316,46 +314,104 @@ else:
                 self.firstpick = False
             else:
                 self.prev_artist.set_color('black')
-                self.prev_artist.set_markersize(1)
+                self.prev_artist.set_markersize(0.3)
 
-            event.artist.set_color('turquoise')
-            event.artist.set_markersize(2)
+            event.artist.set_color('red')
+            event.artist.set_markersize(1.5)
             k = event.artist.id # <- When the section is plotted (see below), an "ID" attribute is set to
                                 #    match it with its corresponding orbit. TODO: find a clearer approach?
             self.line_orbits.set_xdata(self.orbits_x[k])
             self.line_orbits.set_ydata(self.orbits_y[k])
             self.line_orbits.figure.canvas.draw()
             self.prev_artist = event.artist
+            
+        def integrate(self):
+            # Sample ICs uniformly on x axis
+            x_ic = np.linspace(-xlim,xlim,args.nb_orbs)
+            ydot_ic = np.sqrt(2*(self.E-pot.potential([x_ic,np.zeros(args.nb_orbs)])))
+            
+            for k in range(args.nb_orbs):
+                y0 = [x_ic[k],0,0,ydot_ic[k]]
+                res = solver.integrate_orbit(RHS,t_span,y0,t_eval=t_eval,events=event_yplanecross,event_count_end=event_count_max)
 
-    # Sample ICs uniformly on x axis
-    x_ic = np.linspace(-xlim,xlim,args.nb_orbs)
-    ydot_ic = np.empty(args.nb_orbs)
-    for i,x in enumerate(x_ic):
-        ydot_ic[i] = np.sqrt(2*(args.E-pot.potential([x_ic[i],0])))
+                # Output the orbits to be displayed upon clicking
+                self.append_orbit(res['y'][0],res['y'][1])
+
+                # Ouput of event watcher
+                yevs = res['y_events'][0]
+                X = yevs[:,0]
+                Xdot = yevs[:,2]
+
+                # Plot Poincaré curve and set its ID to pair it with corresponding orbit
+                secline, = ax[0].plot(X, Xdot,'o',ms=0.3,color='black',picker=True)
+                secline.id = k
+                self.append_section(secline)
+
+    Picker = OrbitPicker(ax[0],ax[1],args.E)
+    Picker.integrate()
+
+elif args.mode == "tomographic":
+    lines_sections = [ax[0].plot([], [],'o',ms=0.3,color='black')[0] for i in range(args.nb_orbs)]
+    lines_orbits = [ax[1].plot([], [],lw=1)[0] for i in range(args.nb_orbs)]
+
+    class ensemble:
+        def __init__(self,line1,line2,E):
+            self.E = E
+            self.line1 = line1
+            self.line2 = line2
+            xlim = 0.9999*pot.maxval_x(E)
+            x_ic = np.linspace(-xlim,xlim,args.nb_orbs)
+            ydot_ic = np.sqrt(2*(self.E-pot.potential([x_ic,np.zeros(args.nb_orbs)])))
+            self.orbits = []
+            self.sections = []
+            for k in range(args.nb_orbs):
+                y0 = [x_ic[k],0,0,ydot_ic[k]]
+                res = solver.integrate_orbit(RHS,t_span,y0,t_eval=t_eval,events=event_yplanecross,event_count_end=event_count_max)
+
+                # Output the orbits to be displayed upon clicking
+                self.orbits.append(res['y'])
+                yevs = res['y_events'][0].T
+                self.sections.append(yevs[[0,2]])
+        
+        def update_plot(self):
+            #print(self.orbits[0])
+            for i in range(args.nb_orbs):
+                self.line1[i].set_xdata(self.sections[i][0])
+                self.line1[i].set_ydata(self.sections[i][1])
+                ax[0].relim()
+                ax[0].autoscale()
+            self.line1[0].figure.canvas.draw()
+
+    erange = np.linspace(args.E-60,args.E+120,20)
+    enss = []
+    for e in tqdm(erange):
+        enss.append(ensemble(lines_sections,lines_orbits,e))
     
-    
-    txt.set_text('Click on a curve to\nshow its orbit')
-    Picker = OrbitPicker(line_orbits)
+    '''
+    ens1 = ensemble(lines_sections,lines_orbits,args.E - 40)
+    ens2 = ensemble(lines_sections,lines_orbits,args.E - 20)
+    ens3 = ensemble(lines_sections,lines_orbits,args.E)
+    ens4 = ensemble(lines_sections,lines_orbits,args.E + 20)
+    enss = [ens1,ens2,ens3,ens4]
+    '''
+    class tomography:
+        def __init__(self,ensemblelist):
+            self.ensemblelist = ensemblelist
+            self.idx = 0
+            self.ensemblelist[self.idx].update_plot()
+            fig.canvas.mpl_connect('key_press_event',self)
+        def __call__(self,event):
+            if event.key == 'up':
+                ii = self.idx + 1
+            elif event.key == 'down':
+                ii = self.idx - 1
+            if ii in range(len(self.ensemblelist)):
+                self.ensemblelist[ii].update_plot()
+                self.idx = ii
 
-    # Integrate the nb_orbs trajectories
-    for k in tqdm(range(args.nb_orbs)):
-        y0 = [x_ic[k],0,0,ydot_ic[k]]
-        #res = scpint.solve_ivp(RHS,tsp,y0,t_eval=t_eval,method='DOP853',events=event_yplanecross)
-        res = solver.integrate_orbit(RHS,t_span,y0,t_eval=t_eval,events=event_yplanecross,event_count_end=event_count_max)
-
-        # Output the orbits to be displayed upon clicking
-        Picker.append_orbit(res['y'][0],res['y'][1])
-
-        # Ouput of event watcher
-        yevs = res['y_events'][0]
-        X = yevs[:,0]
-        Xdot = yevs[:,2]
-
-        # Plot Poincaré curve and set its ID to pair it with corresponding orbit
-        secline, = ax[0].plot(X, Xdot,'o',ms=0.7,color='black',picker=True)
-        secline.id = k
-        Picker.append_section(secline)
-
+    tom = tomography(enss)
+else:
+    raise NameError("Unknown mode: '{:s}'.".format(args.mode))
 plt.show()
 
 
