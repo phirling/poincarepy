@@ -8,6 +8,9 @@ old/
 # C extensions
 *.so
 
+# Ignore pickle files
+*.pkl
+
 # Distribution / packaging
 .Python
 build/
