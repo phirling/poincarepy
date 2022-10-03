@@ -40,6 +40,11 @@ parser.add_argument("-nb_crossings",type=int,default= 40,help="Terminate integra
 parser.add_argument("--fill",action='store_true',help="Try to fill the phase space with orbits")
 parser.add_argument("-nb_orbs",type=int,default=11,help="Number of orbits to sample if --fill is passed")
 
+# Tomographic mode
+parser.add_argument("-Emin",type=float,default=20)
+parser.add_argument("-Emax",type=float,default=200)
+parser.add_argument("-nb_E",type=int,default=5,help="Number of energy slices in tomographic mode")
+
 args = parser.parse_args()
 
 # Define Physical System. The potential is implemented as a class in view of modularity,
@@ -351,51 +356,39 @@ elif args.mode == "fill":
     Picker.integrate()
 
 elif args.mode == "tomographic":
+    # Create empty line objects in the figure to speed up switching between E frames
     lines_sections = [ax[0].plot([], [],'o',ms=0.3,color='black')[0] for i in range(args.nb_orbs)]
     lines_orbits = [ax[1].plot([], [],lw=1)[0] for i in range(args.nb_orbs)]
-
-    class ensemble:
-        def __init__(self,line1,line2,E):
+    class OrbitEnsemble:
+        def __init__(self,potential,line1,line2,E):
             self.E = E
             self.line1 = line1
             self.line2 = line2
-            xlim = 0.9999*pot.maxval_x(E)
-            x_ic = np.linspace(-xlim,xlim,args.nb_orbs)
-            ydot_ic = np.sqrt(2*(self.E-pot.potential([x_ic,np.zeros(args.nb_orbs)])))
             self.orbits = []
             self.sections = []
+            self.pot = potential
+            self.integrate()
+        def integrate(self):
+            xlim = 0.9999*self.pot.maxval_x(self.E)
+            x_ic = np.linspace(-xlim,xlim,args.nb_orbs)
+            ydot_ic = np.sqrt(2*(self.E-pot.potential([x_ic,np.zeros(args.nb_orbs)])))
             for k in range(args.nb_orbs):
                 y0 = [x_ic[k],0,0,ydot_ic[k]]
                 res = solver.integrate_orbit(RHS,t_span,y0,t_eval=t_eval,events=event_yplanecross,event_count_end=event_count_max)
 
-                # Output the orbits to be displayed upon clicking
                 self.orbits.append(res['y'])
                 yevs = res['y_events'][0].T
                 self.sections.append(yevs[[0,2]])
-        
         def update_plot(self):
-            #print(self.orbits[0])
             for i in range(args.nb_orbs):
                 self.line1[i].set_xdata(self.sections[i][0])
                 self.line1[i].set_ydata(self.sections[i][1])
-                ax[0].relim()
-                ax[0].autoscale()
+            self.line1[0].axes.relim()
+            self.line1[0].axes.autoscale()
             self.line1[0].figure.canvas.draw()
 
-    erange = np.linspace(args.E-60,args.E+120,20)
-    enss = []
-    for e in tqdm(erange):
-        enss.append(ensemble(lines_sections,lines_orbits,e))
-    
-    '''
-    ens1 = ensemble(lines_sections,lines_orbits,args.E - 40)
-    ens2 = ensemble(lines_sections,lines_orbits,args.E - 20)
-    ens3 = ensemble(lines_sections,lines_orbits,args.E)
-    ens4 = ensemble(lines_sections,lines_orbits,args.E + 20)
-    enss = [ens1,ens2,ens3,ens4]
-    '''
-    class tomography:
-        def __init__(self,ensemblelist):
+    class TomographicPlot:
+        def __init__(self,fig,ensemblelist):
             self.ensemblelist = ensemblelist
             self.idx = 0
             self.ensemblelist[self.idx].update_plot()
@@ -409,7 +402,17 @@ elif args.mode == "tomographic":
                 self.ensemblelist[ii].update_plot()
                 self.idx = ii
 
-    tom = tomography(enss)
+    ##### TESTS
+    erange = np.linspace(args.Emin,args.Emax,args.nb_E)
+    enss = []
+    print("Generating plots for {:.0f} energy levels...".format(args.nb_E))
+    for e in tqdm(erange):
+        enss.append(OrbitEnsemble(pot,lines_sections,lines_orbits,e))
+
+    tom = TomographicPlot(fig,enss)
+    
+elif args.mode == "test":
+    pass
 else:
     raise NameError("Unknown mode: '{:s}'.".format(args.mode))
 plt.show()
