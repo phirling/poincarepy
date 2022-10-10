@@ -5,7 +5,8 @@ import argparse
 import solver
 import pickle as pkl
 from common import PoincareCollection, Tomography
-from potentials import LogarithmicPotential
+from potentials import *
+import scipy.optimize as scpopt
 
 parser = argparse.ArgumentParser(
     description="Poincare x vx Section of Logarithmic potential"
@@ -67,10 +68,15 @@ if args.progress:
 else:
     progbar = lambda itb: itb
 
-def integrate_energy(pot,E,N_orbits,t_span,t_eval,event,event_count_max):
-    xlim = 0.9999*pot.maxval_x(E)
-    x_ic = np.linspace(-xlim,xlim,N_orbits)
+# This function is a draft
+def integrate_energy(pot,E,N_orbits,t_span,t_eval,event,event_count_max,xlim=None):
+    g = lambda x: E-pot.phi(np.array([x,np.zeros_like(x)]))
+    gprime = lambda x: pot.accel(np.array([x,np.zeros_like(x),np.zeros_like(x),np.zeros_like(x)]))[0]
+    xlim = 0.999*scpopt.newton(g,(-1,1),gprime)
+    if max(xlim) > 1e5: raise ValueError("Probable error in xlim computation")
+    x_ic = np.linspace(xlim[0],xlim[1],N_orbits)
     ydot_ic = np.sqrt(2*(E-pot.phi([x_ic,np.zeros(N_orbits)])))
+
     f = lambda t,y: pot.RHS(t,y)
     orbits = []
     sections = []
@@ -86,16 +92,21 @@ if __name__ == "__main__":
     # If no previous file is loaded, create new collection by
     # integrating nb_orbs at each energy level
     if args.open is None:
+        # Construct a potential here
         pot = LogarithmicPotential(args.v0,args.rc,args.q)
+        rot = zRotation(0.4)
+        totalpot = pot + rot
+        
         E_range = np.linspace(args.Emin,args.Emax,args.nb_E)
         orbslist = []
         secslist = []
         for e in progbar(E_range):
-            o,s = integrate_energy(pot,e,args.nb_orbs,t_span,t_eval,event_yplanecross,event_count_max)
+            o,s = integrate_energy(totalpot,e,args.nb_orbs,t_span,
+                t_eval,event_yplanecross,event_count_max,xlim=None)
             orbslist.append(o)
             secslist.append(s)
         
-        col = PoincareCollection(E_range,orbslist,secslist,pot.info())
+        col = PoincareCollection(E_range,orbslist,secslist,totalpot.info())
     else:
         with open(args.open,'rb') as f:
             col = pkl.load(f)
@@ -103,7 +114,7 @@ if __name__ == "__main__":
     fs = (15,7)
     fig, ax = plt.subplots(1,2,figsize=fs)
     tom = Tomography(ax[0],ax[1],col,args.redraw_orbit)
-    col.potential_info()
+    #col.potential_info()
 
     if args.save:
         with open('PoincareCollection.pkl','wb') as f:

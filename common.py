@@ -48,12 +48,13 @@ class PoincareCollection:
         self.energylist = E_list
         self.orbitslist = orbits_list
         self.sectionslist = sections_list
-        self._potentialinfo = potential_info
+        self.potentialinfo = potential_info
         self.nb_energies = len(E_list)
         self.nb_orbits_per_E = len(orbits_list[0])
     def potential_info(self):
         """Print information about the potential that generated the collection"""
-        print(self._potentialinfo)
+        print("Source Potential (sum if multiple):")
+        print(self.potentialinfo)
 
 class Tomography:
     """Tomographic visualisation of a PoincareCollection
@@ -94,7 +95,9 @@ class Tomography:
         self.lines_sec = [ax_sec.plot([], [],'o',ms=0.3,color='black',picker=True,pickradius=5)[0] for i in range(data.nb_orbits_per_E)]
         self.line_orb = ax_orb.plot([], [],lw=1)[0]
         self.idx = 0
+        ax_orb.axis('equal')
         self._fig = ax_sec.figure
+        self._fig.suptitle(data.potentialinfo)
         self._fig.canvas.mpl_connect('key_press_event',self)
         self._fig.canvas.mpl_connect('pick_event',self.onpick)
         self.show(0)
