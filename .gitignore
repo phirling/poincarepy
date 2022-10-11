@@ -11,6 +11,9 @@ old/
 # Ignore pickle files
 *.pkl
 
+# Ignore notebooks
+*.ipynb
+
 # Distribution / packaging
 .Python
 build/

@@ -23,10 +23,10 @@ parser.add_argument("-rc",type=float,default=1.,help="Characteristic Radius")
 parser.add_argument("-q",type=float,default=0.8,help="Flattening Parameter")
 
 # Tomography Parameters
-parser.add_argument("-Emin",type=float,default=20)
-parser.add_argument("-Emax",type=float,default=200)
-parser.add_argument("-nb_E",type=int,default=5,help="Number of energy slices in tomographic mode")
-parser.add_argument("--redraw_orbit",action='store_true')
+parser.add_argument("-Emin",type=float,default=30.)
+parser.add_argument("-Emax",type=float,default=200.)
+parser.add_argument("-nb_E",type=int,default=3,help="Number of energy slices in tomographic mode")
+parser.add_argument("--no_orbit_redraw",action='store_false')
 
 # Script Parameters
 parser.add_argument("--progress",action='store_true',help="Use tqdm to show progress bar")
@@ -73,10 +73,14 @@ def integrate_energy(pot,E,N_orbits,t_span,t_eval,event,event_count_max,xlim=Non
     g = lambda x: E-pot.phi(np.array([x,np.zeros_like(x)]))
     gprime = lambda x: pot.accel(np.array([x,np.zeros_like(x),np.zeros_like(x),np.zeros_like(x)]))[0]
     xlim = 0.999*scpopt.newton(g,(-1,1),gprime)
-    if max(xlim) > 1e5: raise ValueError("Probable error in xlim computation")
+    if max(xlim) > 1e5: raise ValueError("Probable error in xlim computation for E={:1f}".format(E))
+    print(E)
+    print(xlim)
+    print(g(xlim))
+    print()
     x_ic = np.linspace(xlim[0],xlim[1],N_orbits)
     ydot_ic = np.sqrt(2*(E-pot.phi([x_ic,np.zeros(N_orbits)])))
-
+    #print(pot.phi(np.array([1,0,0,0])))
     f = lambda t,y: pot.RHS(t,y)
     orbits = []
     sections = []
@@ -93,28 +97,40 @@ if __name__ == "__main__":
     # integrating nb_orbs at each energy level
     if args.open is None:
         # Construct a potential here
-        pot = LogarithmicPotential(args.v0,args.rc,args.q)
-        rot = zRotation(0.4)
-        totalpot = pot + rot
-        
+        """
+        pot = LogarithmicPotential(args.v0,args.rc,args.q,zeropos=(2,2))
+        """
+        r0 = (0,0)
+        logpot = LogarithmicPotential(zeropos=r0)
+        rotpot = zRotation(0.3,zeropos=r0)
+
+        pot = CombinedPotential(logpot,rotpot)
+        #pot = HomospherePotential(a=5.0,M=1000.,zeropos=r0)
+
+        # Test if energy range is compatible with potential
         E_range = np.linspace(args.Emin,args.Emax,args.nb_E)
+        potrange = pot.get_energyrange()
+        if np.any(np.logical_or(np.less(E_range,potrange[0]),np.greater(E_range,potrange[1]))):
+            raise ValueError(
+            "Some of the given energies are outside the scope of the provided potential ({:.1f},{:.1f})"
+            .format(potrange[0],potrange[1])
+            )
         orbslist = []
         secslist = []
         for e in progbar(E_range):
-            o,s = integrate_energy(totalpot,e,args.nb_orbs,t_span,
+            o,s = integrate_energy(pot,e,args.nb_orbs,t_span,
                 t_eval,event_yplanecross,event_count_max,xlim=None)
             orbslist.append(o)
             secslist.append(s)
         
-        col = PoincareCollection(E_range,orbslist,secslist,totalpot.info())
+        col = PoincareCollection(E_range,orbslist,secslist,pot.info())
     else:
         with open(args.open,'rb') as f:
             col = pkl.load(f)
 
     fs = (15,7)
     fig, ax = plt.subplots(1,2,figsize=fs)
-    tom = Tomography(ax[0],ax[1],col,args.redraw_orbit)
-    #col.potential_info()
+    tom = Tomography(ax[0],ax[1],col,args.no_orbit_redraw)
 
     if args.save:
         with open('PoincareCollection.pkl','wb') as f:

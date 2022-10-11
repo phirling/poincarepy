@@ -51,10 +51,9 @@ class PoincareCollection:
         self.potentialinfo = potential_info
         self.nb_energies = len(E_list)
         self.nb_orbits_per_E = len(orbits_list[0])
-    def potential_info(self):
+    def get_potential_info(self):
         """Print information about the potential that generated the collection"""
-        print("Source Potential (sum if multiple):")
-        print(self.potentialinfo)
+        return self.potentialinfo
 
 class Tomography:
     """Tomographic visualisation of a PoincareCollection
@@ -88,7 +87,7 @@ class Tomography:
         Index of the currently displayed energy level
     
     """
-    def __init__(self,ax_sec: Axes,ax_orb: Axes,data: PoincareCollection, redraw_orbit: bool = False) -> None:
+    def __init__(self,ax_sec: Axes,ax_orb: Axes,data: PoincareCollection, redraw_orbit: bool = True) -> None:
         self._firstpick = True
         self.redraw_orbit = redraw_orbit
         self.collection = data
@@ -108,10 +107,11 @@ class Tomography:
         event : matplotlib.key_press_event
             Up or down key press event
         """
+        ii = self.idx
         if event.key == 'up':
-            ii = self.idx + 1
+            ii += 1
         elif event.key == 'down':
-            ii = self.idx - 1
+            ii -= 1
         if ii in range(self.collection.nb_energies):
             self.show(ii)
             self.idx = ii
@@ -132,6 +132,7 @@ class Tomography:
             self.line_orb.set_ydata(self.collection.orbitslist[idx][self.artistid][1])
             self.line_orb.axes.relim()
             self.line_orb.axes.autoscale()
+        self.lines_sec[0].axes.set_title("E = {:.1f}".format(self.collection.energylist[idx]))
         self.lines_sec[0].axes.figure.canvas.draw()
     def onpick(self,event):
         """Interaction function to show an orbit by picking a surface of section
@@ -154,3 +155,6 @@ class Tomography:
         self.line_orb.axes.autoscale()
         event.artist.figure.canvas.draw()
         self.prev_artist = event.artist
+
+
+"""Periodic orbit finder"""
