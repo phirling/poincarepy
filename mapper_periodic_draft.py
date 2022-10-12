@@ -28,8 +28,6 @@ class PoincareMapper:
         self._evt = crossing_function
         self._dx = dx
         self._dvx = dvx
-        self._EPS = 1e-5
-        self._maxiter = 100
     def map(self,q,E,N=1):
         """Map a point q to its Poincare map after N crossings (in 2D)
         Parameters
@@ -83,7 +81,8 @@ class PoincareMapper:
         J11 = (Tvxf[1] - Tvxb[1]) / (2*self._dvx)
         jac_matrix = np.array([[J00,J01],[J10,J11]])
         return jac_matrix
-    def find_periodic_orbit(self,q0,E,N=1,print_result=False,print_progress=False):
+    def find_periodic_orbit(self,q0,E,N=1,print_result=False,print_progress=False,
+                            maxiter = 100, eps = 1e-5):
         """Starting from q0 at energy E, find an N-periodic orbit
         Parameters
         ----------
@@ -96,7 +95,11 @@ class PoincareMapper:
         print_result : bool
             Print the found periodic orbit
         print_progress : bool
-            Print the steps performed during the search 
+            Print the steps performed during the search
+        maxiter: int
+            Maximum number of iterations for the orbit search
+        eps: float
+            Precision |q_n-q_n-1| < eps required to find an orbit
         Returns
         -------
         q* : array (2,) or None
@@ -111,14 +114,14 @@ class PoincareMapper:
         ii = 0
         qn = np.asarray(q0)
         deltq = q
-        while np.linalg.norm(deltq) > self._EPS:
+        while np.linalg.norm(deltq) > eps:
             ii += 1
             deltq = scpopt.lsq_linear(dF(qn),-F(qn))['x']
             # Check if the new point lies outside zero-vel curve
             while self.map(qn + deltq,E,N) is None:
                 deltq /= 4.
             qn += deltq
-            if ii > self._maxiter:
+            if ii > maxiter:
                 print("Maximum number of iterations reached")
                 return None
             if print_progress:
