@@ -123,7 +123,7 @@ if __name__ == "__main__":
             orbslist.append(o)
             secslist.append(s)
         
-        col = PoincareCollection(E_range,orbslist,secslist,pot.info())
+        col = PoincareCollection(E_range,orbslist,secslist,pot)
     else:
         with open(args.open,'rb') as f:
             col = pkl.load(f)
