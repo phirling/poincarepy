@@ -2,9 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 import pickle as pkl
-from common import PoincareCollection, Tomography
+from common import PoincareCollection, Tomography, PoincareMapper
 from potentials import *
-from mapper_periodic_draft import PoincareMapper
 
 
 if __name__ == "__main__":
