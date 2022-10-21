@@ -108,7 +108,8 @@ def integrate_orbit(fun, t_span, y0, t_eval=None, events=None,event_count_end = 
                 t_eval_i = t_eval_i_new
 
     if event_count_end is not None and status == 0:
-        print("Warning: the time limit tf={:.1f} was reached before {:.0f} crossings could occur".format(tf,event_count_end))
+        #print("Warning: the time limit tf={:.1f} was reached before {:.0f} crossings could occur".format(tf,event_count_end))
+        raise RuntimeError("The time limit tf={:.1f} was reached before {:.0f} crossings could occur".format(tf,event_count_end))
     
     if t_events is not None:
         t_events = [np.asarray(te) for te in t_events]

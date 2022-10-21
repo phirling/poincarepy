@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 import pickle as pkl
-from common import PoincareCollection, Tomography, PoincareMapper, Tomography2
+from common import PoincareCollection, Tomography, PoincareMapper, Tomography3
 from potentials import *
 
 
@@ -44,17 +44,17 @@ if __name__ == "__main__":
         mapper = PoincareMapper(pot,event_yplanecross)
 
         # Create Poincare sections over a range of energies
-        E_range = np.linspace(args.Emin,args.Emax,args.N_E)
-        orbslist = []
-        secslist = []
-        zerovelcurvelist = []
-        for e in E_range:
+        energylist = np.linspace(args.Emin,args.Emax,args.N_E)
+        orbitslist = []
+        sectionslist = np.empty((args.N_E,args.N_orbits,2,args.N_points))
+        zvclist = np.empty((args.N_E,2,800)) # 400 see in PoincareMapper (TODO)
+        for j,e in enumerate(energylist):
             s,o,zvc = mapper.section(e,args.N_orbits,args.N_points)
-            orbslist.append(o)
-            secslist.append(s)
-            zerovelcurvelist.append(zvc)
+            orbitslist.append(o)
+            sectionslist[j] = s
+            zvclist[j] = zvc
             
-        col = PoincareCollection(E_range,orbslist,secslist,zerovelcurvelist,mapper)
+        col = PoincareCollection(energylist,orbitslist,sectionslist,zvclist,mapper)
 
         if args.save is not None:
             with open(args.save,'wb') as f:
@@ -64,23 +64,15 @@ if __name__ == "__main__":
         with open(args.open,'rb') as f:
             col = pkl.load(f)
     
-        #mapper = col.mapper
-        #pot = col.mapper.pot
-
-
+        mapper = col.mapper
+        orbitslist = col.orbitslist
+        sectionslist = col.sectionsarray
+        energylist = col.energylist
+        zvclist = col.zvc_list
+    
     # Tomographic plot
-    """fs = (15,7)
-    ffs = 16
-    fig, ax = plt.subplots(1,2,figsize=fs)
-    # Style plot
-    ax[0].set_xlabel("$x$",fontsize=ffs)
-    ax[0].set_ylabel("$\dot{x}$",fontsize=ffs)
-    ax[1].set_xlabel("$x$",fontsize=ffs)
-    ax[1].set_ylabel("$y$",fontsize=ffs)
-
-    tom = Tomography(ax[0],ax[1],col,args.no_orbit_redraw)"""
-    tom = Tomography2(col)
-
+    tom = Tomography3(sectionslist,orbitslist,zvclist,energylist,mapper)
+    #tom = Tomography(col)
     
 
     plt.show()
