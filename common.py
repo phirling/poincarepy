@@ -1,10 +1,10 @@
-import numpy as np
 import solver
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.widgets import Button, TextBox
 from potentials import Potential
 import copy
+import numpy as np
 import scipy.optimize as scpopt
 
 class PoincareMapper:
@@ -407,5 +407,421 @@ class Tomography:
                 self.line_orb.axes.relim()
                 self.line_orb.axes.autoscale()
                 self._fig.canvas.draw()
+            else:
+                print("The orbit finder did not converge with the provided starting guess")
+
+
+class Tomography2:
+    """Tomographic visualisation of a PoincareCollection
+
+    Class that contains a Poincare Collection and references to matplotlib
+    axes and is used to interactively pan through the collection's energy
+    levels, as well as to display orbits by clicking on the surfaces of section
+
+    Parameters
+    ----------
+    ax_sec: matplotlib.Axes
+        Axes that should display the surfaces of section
+    ax_orb: matplotlib.Axes
+        Axes that should display the configuration space orbits
+    data: PoincareCollection
+        Collection that is imaged by the Tomography
+    redraw_orbit: bool, optional
+        If orbit k is selected at some energy, this parameter decides whether to
+        redraw the new k-th orbit when the energy is changed. Not entirely physical
+        but can be interesting to visualize. Disabled for performance.
+
+    Attributes
+    ----------
+    [parameters]
+    lines_sec: list of matplotlib.line2D
+        List of length nb_orbits_per_E artists that draw the points of a surface
+        of section. The points are updated every time the energy is changed.
+    line_orb: matplotlib.line2D
+        Artist that draws the orbit in ax_orb when a section is selected in ax_sec
+    idx: int
+        Index of the currently displayed energy level
+    
+    Figure layout:
+    <0.04> margin <0.1> buttons <0.02> margin <0.3> axes <0.02> margin <0.3> axes <0.04> margin
+    """
+    def __init__(self,collection: PoincareCollection,figsize=(15,7), redraw_orbit: bool = True) -> None:
+        """ Load Data """
+        self.collection = collection
+
+        """ Construct figure """
+        # Main fig & axes
+        self.fig = plt.figure(figsize=figsize)
+        aspct = figsize[0] / figsize[1]
+        axw = 0.36
+        self.ax_sec = self.fig.add_axes([0.18,0.08,axw,axw * aspct])
+        self.ax_orb = self.fig.add_axes([0.61,0.08,axw,axw * aspct])
+        self.ax_orb.axis('equal')
+        ffs = 16
+        self.ax_sec.set_xlabel("$x$",fontsize=ffs)
+        self.ax_sec.set_ylabel("$\dot{x}$",fontsize=ffs)
+        self.ax_orb.set_xlabel("$x$",fontsize=ffs)
+        self.ax_orb.set_ylabel("$y$",fontsize=ffs)
+        self.ax_sec.set_title("Section Plane",fontsize=ffs)
+        self.ax_orb.set_title("Orbital Plane",fontsize=ffs)
+
+        self.lines_sec = [self.ax_sec.plot([], [],'o',ms=0.3,color='black',picker=True,pickradius=5)[0] for i in range(collection.nb_orbits_per_E)]
+        self.line_orb = self.ax_orb.plot([], [],lw=1,color='tomato')[0]
+        self.line_zvc = self.ax_sec.plot([], [],lw=0.5,color='indianred')[0]
+
+        # Quit button
+        ax_quitbutton = self.fig.add_axes([0.03, 0.05, 0.1, 0.075])
+        self.button_quit = Button(ax_quitbutton,"Quit",color='mistyrose',hovercolor='lightcoral')
+        self.button_quit.on_clicked(self._quitfig)
+        
+        # Set period with a Text box
+        ax_setperiod = self.fig.add_axes([0.08, 0.3, 0.05, 0.05])
+        self.textbox_setperiod = TextBox(ax_setperiod,'$p=$  ',color='mistyrose',
+                    hovercolor='lightcoral', initial=1)
+        self.textbox_setperiod.on_submit(self._setperiod)
+        self._p = 1
+
+        # Button to enable/disable search mode
+        ax_searchbutton = self.fig.add_axes([0.03, 0.375, 0.1, 0.075])
+        self.button_search = Button(ax_searchbutton,'Search for\np-periodic orbits',
+                    color='mistyrose',hovercolor='lightcoral')
+        self.button_search.on_clicked(self._searchmode)
+        self.line_psection, = self.ax_sec.plot([],[],'o',ms=4,color='mediumspringgreen')
+        self._in_searchmode = False
+
+        # Interactivity (switch energy, click on section)
+        self._firstpick = True
+        self.redraw_orbit = redraw_orbit
+        self.idx = 0
+        self.fig.canvas.mpl_connect('key_press_event',self)
+        self._pickid = self.fig.canvas.mpl_connect('pick_event',self._onpick)
+
+        # Show lowest energy to start
+        self.show(0)
+
+        ### WIP
+        """#axredrawbtn = self.fig.add_axes([0.0, 0.15, 0.1, 0.075])
+        #self.redrawbtn = Button(axredrawbtn,'Redraw',color='mistyrose',hovercolor='lightcoral')
+        self.fig.text(0.03,0.225,'Redraw current section\nwith N orbits:')
+        axredrawtext = self.fig.add_axes([0.03, 0.15, 0.1, 0.05])
+        self.redrawtext = TextBox(axredrawtext,'',
+                                color='mistyrose',hovercolor='lightcoral',
+                                initial=10)
+        self.redrawtext.on_submit(self._redraw)"""
+        
+    def __call__(self,event):
+        """Interaction function to switch energy level by up/down keys
+        Parameters
+        ----------
+        event : matplotlib.key_press_event
+            Up or down key press event
+        """
+        ii = self.idx
+        if event.key == 'up':
+            ii += 1
+        elif event.key == 'down':
+            ii -= 1
+        if ii in range(self.collection.nb_energies):
+            self.show(ii)
+            self.idx = ii
+    def show(self,idx):
+        """Function that updates the plot when energy is changed
+        Parameters
+        ----------
+        idx : int
+            Index of the energy level to switch to
+        """
+        for k,l in enumerate(self.lines_sec):
+            l.set_xdata(self.collection.sectionslist[idx][k][0])
+            l.set_ydata(self.collection.sectionslist[idx][k][1])
+        if hasattr(self.collection,'zvc_list'):
+            self.line_zvc.set_xdata(self.collection.zvc_list[idx][0])
+            self.line_zvc.set_ydata(self.collection.zvc_list[idx][1])
+        self.lines_sec[0].axes.relim()
+        self.lines_sec[0].axes.autoscale()
+        if not self._firstpick and self.redraw_orbit:
+            self.line_orb.set_xdata(self.collection.orbitslist[idx][self.artistid][0])
+            self.line_orb.set_ydata(self.collection.orbitslist[idx][self.artistid][1])
+            self.line_orb.axes.relim()
+            self.line_orb.axes.autoscale()
+        #self.lines_sec[0].axes.set_title("E = {:.1f}".format(self.collection.energylist[idx]))
+        self.lines_sec[0].axes.figure.canvas.draw()
+    def _onpick(self,event):
+        """Interaction function to show an orbit by picking a surface of section
+        Parameters
+        ----------
+        event : matplotlib.pick_event
+            Event of picking a surface of section
+        """
+        if self._firstpick:
+            self._firstpick = False
+        else:
+            self.prev_artist.set_color('black')
+            self.prev_artist.set_markersize(0.3)
+        event.artist.set_color('orangered')
+        event.artist.set_markersize(1.5)
+        self.artistid = self.lines_sec.index(event.artist)
+        self.line_orb.set_xdata(self.collection.orbitslist[self.idx][self.artistid][0])
+        self.line_orb.set_ydata(self.collection.orbitslist[self.idx][self.artistid][1])
+        self.line_orb.axes.relim()
+        self.line_orb.axes.autoscale()
+        self.fig.canvas.draw()
+        self.prev_artist = event.artist
+
+    def _quitfig(self,event):
+        print("Program was exited by the user")
+        plt.close(self.fig)
+    def _redraw(self,N):
+        new_N = int(N)
+        pass
+    def _setperiod(self,p):
+        self._p = int(p)
+    def _searchmode(self,event):
+        if not self._in_searchmode:
+            self.button_search.color = 'firebrick'
+            self._in_searchmode = True
+            self._clickid = self.fig.canvas.mpl_connect('button_press_event',self._click)
+            self.line_orb.set_xdata([])
+            self.line_orb.set_ydata([])
+            self.line_psection.set_visible(True)
+            self.fig.canvas.mpl_disconnect(self._pickid)
+        else:
+            self.button_search.color = 'mistyrose'
+            self._in_searchmode = False
+            self.fig.canvas.mpl_disconnect(self._clickid)
+            self.line_psection.set_xdata([])
+            self.line_psection.set_ydata([])
+            self.line_orb.set_xdata([])
+            self.line_orb.set_ydata([])
+            self.line_psection.set_visible(False)
+            self._pickid = self.fig.canvas.mpl_connect('pick_event',self._onpick)
+    def _click(self,event):
+        if event.inaxes == self.line_zvc.axes:
+            E = self.collection.energylist[self.idx]
+            q0 = [event.xdata,event.ydata]
+            qstar = self.collection.mapper.find_periodic_orbit(q0,E,
+                    self._p,print_progress=True,eps=1e-3,maxiter=100)
+            if qstar is not None:
+                #self.line_psection.set_xdata(qstar[0])
+                #self.line_psection.set_ydata(qstar[1])
+                if 1:
+                    eigvals = np.linalg.eigvals(self.collection.mapper.jac(qstar,E,self._p))
+                    print(eigvals)
+                    print(np.abs(eigvals))
+                s,o = self.collection.mapper.integrate_orbit(qstar,E,N=5*self._p)
+                self.line_psection.set_xdata(s[0])
+                self.line_psection.set_ydata(s[1])
+                self.line_orb.set_xdata(o[0])
+                self.line_orb.set_ydata(o[1])
+                self.line_orb.axes.relim()
+                self.line_orb.axes.autoscale()
+                self.fig.canvas.draw()
+            else:
+                print("The orbit finder did not converge with the provided starting guess")
+
+class Tomography3:
+    """Tomographic visualisation of a PoincareCollection
+
+    Class that contains a Poincare Collection and references to matplotlib
+    axes and is used to interactively pan through the collection's energy
+    levels, as well as to display orbits by clicking on the surfaces of section
+
+    Parameters
+    ----------
+    ax_sec: matplotlib.Axes
+        Axes that should display the surfaces of section
+    ax_orb: matplotlib.Axes
+        Axes that should display the configuration space orbits
+    data: PoincareCollection
+        Collection that is imaged by the Tomography
+    redraw_orbit: bool, optional
+        If orbit k is selected at some energy, this parameter decides whether to
+        redraw the new k-th orbit when the energy is changed. Not entirely physical
+        but can be interesting to visualize. Disabled for performance.
+
+    Attributes
+    ----------
+    [parameters]
+    lines_sec: list of matplotlib.line2D
+        List of length nb_orbits_per_E artists that draw the points of a surface
+        of section. The points are updated every time the energy is changed.
+    line_orb: matplotlib.line2D
+        Artist that draws the orbit in ax_orb when a section is selected in ax_sec
+    idx: int
+        Index of the currently displayed energy level
+    
+    Figure layout:
+    <0.03> margin <0.1> buttons <0.05> margin <0.36> axes <0.07> margin <0.36> axes <0.03> margin
+    """
+    def __init__(self,sectionslist ,orbitslist, zvclist,energylist, mapper: PoincareMapper, figsize=(15,7), redraw_orbit: bool = True) -> None:
+        """ Load Data """
+        self._sl = sectionslist
+        self._ol = orbitslist
+        self._zvcl = zvclist
+        self._El = energylist
+        self.mapper = mapper
+        
+        self._nEn = len(sectionslist)
+        self._nSec = len(sectionslist[0])
+        """ Construct figure """
+        # Main fig & axes
+        self.fig = plt.figure(figsize=figsize)
+        aspct = figsize[0] / figsize[1]
+        axw = 0.36
+        self.ax_sec = self.fig.add_axes([0.18,0.05,axw,axw * aspct])
+        self.ax_orb = self.fig.add_axes([0.61,0.05,axw,axw * aspct])
+        self.ax_orb.axis('equal')
+
+        self.lines_sec = [self.ax_sec.plot([], [],'o',ms=0.3,color='black',picker=True,pickradius=5)[0] for i in range(self._nSec)]
+        self.line_orb = self.ax_orb.plot([], [],lw=1,color='tomato')[0]
+        self.line_zvc = self.ax_sec.plot([], [],lw=0.5,color='indianred')[0]
+
+        # Quit button
+        ax_quitbutton = self.fig.add_axes([0.03, 0.05, 0.1, 0.075])
+        self.button_quit = Button(ax_quitbutton,"Quit",color='mistyrose',hovercolor='lightcoral')
+        self.button_quit.on_clicked(self._quitfig)
+        
+        # Set period with a Text box
+        ax_setperiod = self.fig.add_axes([0.053, 0.3, 0.05, 0.05])
+        self.textbox_setperiod = TextBox(ax_setperiod,'$p$:  ',color='mistyrose',
+                    hovercolor='lightcoral', initial=1)
+        self.textbox_setperiod.on_submit(self._setperiod)
+        self._p = 1
+
+        # Button to enable/disable search mode
+        ax_searchbutton = self.fig.add_axes([0.03, 0.375, 0.1, 0.075])
+        self.button_search = Button(ax_searchbutton,'Search for\np-periodic orbits',
+                    color='mistyrose',hovercolor='lightcoral')
+        self.button_search.on_clicked(self._searchmode)
+        self.line_psection, = self.ax_sec.plot([],[],'o',ms=4,color='mediumspringgreen')
+        self._in_searchmode = False
+
+        # Interactivity (switch energy, click on section)
+        self._firstpick = True
+        self.redraw_orbit = redraw_orbit
+        self.idx = 0
+        self.fig.canvas.mpl_connect('key_press_event',self)
+        self._pickid = self.fig.canvas.mpl_connect('pick_event',self._onpick)
+
+        # Show lowest energy to start
+        self.show(0)
+
+        ### WIP
+        #axredrawbtn = self.fig.add_axes([0.0, 0.15, 0.1, 0.075])
+        #self.redrawbtn = Button(axredrawbtn,'Redraw',color='mistyrose',hovercolor='lightcoral')
+        self.fig.text(0.03,0.225,'Redraw current section\nwith N orbits:')
+        axredrawtext = self.fig.add_axes([0.03, 0.15, 0.1, 0.05])
+        self.redrawtext = TextBox(axredrawtext,'',
+                                color='mistyrose',hovercolor='lightcoral',
+                                initial=10)
+        self.redrawtext.on_submit(self._redraw)
+        
+    def __call__(self,event):
+        """Interaction function to switch energy level by up/down keys
+        Parameters
+        ----------
+        event : matplotlib.key_press_event
+            Up or down key press event
+        """
+        ii = self.idx
+        if event.key == 'up':
+            ii += 1
+        elif event.key == 'down':
+            ii -= 1
+        if ii in range(self._nEn):
+            self.show(ii)
+            self.idx = ii
+    def show(self,idx):
+        """Function that updates the plot when energy is changed
+        Parameters
+        ----------
+        idx : int
+            Index of the energy level to switch to
+        """
+        for k,l in enumerate(self.lines_sec):
+            l.set_xdata(self._sl[idx][k][0])
+            l.set_ydata(self._sl[idx][k][1])
+        if hasattr(self.collection,'zvc_list'):
+            self.line_zvc.set_xdata(self._zvcl[idx][0])
+            self.line_zvc.set_ydata(self._zvcl[idx][1])
+        self.ax_sec.relim()
+        self.ax_sec.autoscale()
+        if not self._firstpick and self.redraw_orbit:
+            self.line_orb.set_xdata(self._ol[idx][self.artistid][0])
+            self.line_orb.set_ydata(self._ol[idx][self.artistid][1])
+            self.ax_orb.relim()
+            self.ax_orb.autoscale()
+        self.ax_sec.set_title("E = {:.1f}".format(self._El[idx]))
+        self.fig.canvas.draw()
+    def _onpick(self,event):
+        """Interaction function to show an orbit by picking a surface of section
+        Parameters
+        ----------
+        event : matplotlib.pick_event
+            Event of picking a surface of section
+        """
+        if self._firstpick:
+            self._firstpick = False
+        else:
+            self.prev_artist.set_color('black')
+            self.prev_artist.set_markersize(0.3)
+        event.artist.set_color('orangered')
+        event.artist.set_markersize(1.5)
+        self.artistid = self.lines_sec.index(event.artist)
+        self.line_orb.set_xdata(self._ol[self.idx][self.artistid][0])
+        self.line_orb.set_ydata(self._ol[self.idx][self.artistid][1])
+        self.ax_orb.relim()
+        self.ax_orb.autoscale()
+        self.fig.canvas.draw()
+        self.prev_artist = event.artist
+
+    def _quitfig(self,event):
+        print("Program was exited by the user")
+        plt.close(self.fig)
+    def _redraw(self,N):
+        new_N = int(N)
+        pass
+    def _setperiod(self,p):
+        self._p = int(p)
+    def _searchmode(self,event):
+        if not self._in_searchmode:
+            self.button_search.color = 'firebrick'
+            self._in_searchmode = True
+            self._clickid = self.fig.canvas.mpl_connect('button_press_event',self._click)
+            self.line_orb.set_xdata([])
+            self.line_orb.set_ydata([])
+            self.line_psection.set_visible(True)
+            self.fig.canvas.mpl_disconnect(self._pickid)
+        else:
+            self.button_search.color = 'mistyrose'
+            self._in_searchmode = False
+            self.fig.canvas.mpl_disconnect(self._clickid)
+            self.line_psection.set_xdata([])
+            self.line_psection.set_ydata([])
+            self.line_orb.set_xdata([])
+            self.line_orb.set_ydata([])
+            self.line_psection.set_visible(False)
+            self._pickid = self.fig.canvas.mpl_connect('pick_event',self._onpick)
+    def _click(self,event):
+        if event.inaxes == self.ax_sec:
+            E = self._El[self.idx]
+            q0 = [event.xdata,event.ydata]
+            qstar = self.mapper.find_periodic_orbit(q0,E,
+                    self._p,print_progress=True,eps=1e-3,maxiter=100)
+            if qstar is not None:
+                #self.line_psection.set_xdata(qstar[0])
+                #self.line_psection.set_ydata(qstar[1])
+                if 1:
+                    eigvals = np.linalg.eigvals(self.mapper.jac(qstar,E,self._p))
+                    print(eigvals)
+                    print(np.abs(eigvals))
+                s,o = self.mapper.integrate_orbit(qstar,E,N=5*self._p)
+                self.line_psection.set_xdata(s[0])
+                self.line_psection.set_ydata(s[1])
+                self.line_orb.set_xdata(o[0])
+                self.line_orb.set_ydata(o[1])
+                self.line_orb.axes.relim()
+                self.line_orb.axes.autoscale()
+                self.fig.canvas.draw()
             else:
                 print("The orbit finder did not converge with the provided starting guess")

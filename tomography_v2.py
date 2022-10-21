@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 import pickle as pkl
-from common import PoincareCollection, Tomography, PoincareMapper
+from common import PoincareCollection, Tomography, PoincareMapper, Tomography2
 from potentials import *
 
 
@@ -69,15 +69,18 @@ if __name__ == "__main__":
 
 
     # Tomographic plot
-    fs = (15,7)
+    """fs = (15,7)
     ffs = 16
     fig, ax = plt.subplots(1,2,figsize=fs)
-    tom = Tomography(ax[0],ax[1],col,args.no_orbit_redraw)
-
     # Style plot
     ax[0].set_xlabel("$x$",fontsize=ffs)
     ax[0].set_ylabel("$\dot{x}$",fontsize=ffs)
     ax[1].set_xlabel("$x$",fontsize=ffs)
     ax[1].set_ylabel("$y$",fontsize=ffs)
+
+    tom = Tomography(ax[0],ax[1],col,args.no_orbit_redraw)"""
+    tom = Tomography2(col)
+
+    
 
     plt.show()
