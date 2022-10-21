@@ -2,7 +2,7 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 import pickle as pkl
-from common import PoincareCollection, Tomography, PoincareMapper, Tomography3
+from common import PoincareCollection, Tomography, PoincareMapper
 from potentials import *
 
 
@@ -71,8 +71,7 @@ if __name__ == "__main__":
         zvclist = col.zvc_list
     
     # Tomographic plot
-    tom = Tomography3(sectionslist,orbitslist,zvclist,energylist,mapper)
-    #tom = Tomography(col)
+    tom = Tomography(sectionslist,orbitslist,zvclist,energylist,mapper)
     
 
     plt.show()
