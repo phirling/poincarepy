@@ -124,8 +124,35 @@ class PoincareMapper:
             print("Converged to a periodic orbit after {:n} iterations:".format(ii))
             print("[x,vx] = [{:.3e},{:.3e}]".format(qn[0],qn[1]))
         return qn
-    def integrate_orbit(self,q,E,N=1,nb_pts_orbit = 10000):
-        if nb_pts_orbit is not None:
+    def integrate_orbit(self,q,E,N=1,N_pts_orbit = 10000):
+        """Integrate an orbit with given starting point
+
+        Same principle as map() but the whole history of crossings, as well as the
+        corresponding configuration-space orbit is returned, with a resolution
+        provided as argument.
+
+        Parameters
+        ----------
+        q : array-like size (2,)
+            Starting point in phase space
+        E : float
+            Energy of the orbit
+        N : int
+            Number of crossings of the section plane
+        N_pts_orbit: int
+            Maximum number of points in the returned config. space orbit array. Max
+            because in reality integration stops when N crossings have occured, so the
+            length of the output orbit array is N'<= N_pts_orbit
+        Returns
+        -------
+        sec : array (2,N)
+            Phase space section of the integrated orbit, i.e. the N points at which
+            the orbit has crossed the section plane in a given direction
+        orb: array(2,*)
+            Configuration space orbit, length depending on integration time required
+            to reach N crossings
+        """
+        if N_pts_orbit is not None:
             t_eval = np.linspace(0,self.maxtime,10000)
         else:
             t_eval = None
@@ -136,7 +163,71 @@ class PoincareMapper:
             y0 = [q[0],0.,q[1],np.sqrt(ED)]
             res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1,t_eval=t_eval)
             return res['y_events'][0][1:,[0,2]].T, res['y'][0:2] # Exclude first event
+    def section(self,E,N_orbits=10,N_points=10,xlim=None,xdot0=None,x0=(-1,1),nb_pts_orbit = 10000):
+        """Calculate a surface of section at given energy
+
+        A surface of section is a collection of N_orbits orbits that fill a given region of
+        the phase space. Each orbit is integrated until N_points crossings of the section
+        plane occur, and at each (oriented) crossing, a point is added to the surface. Phase
+        space is filled by considering ICs distributed linearly in a given or calculated
+        x-range, with xdot_0 a constant value.
+
+        Parameters
+        ----------
+        E : float
+            Energy of the section
+        N_orbits: int
+            Number of orbits in the surface of section
+        N_points: int
+            Number of points per orbit in the map (e.g number of crossings of the section plane)
+        xlim: tuple of floats
+            x-limits of the initial conditions. If none are provided, the maximum physically allowed
+            values are computed from E=phi
+        xdot0: float
+            Constant scalar value for the xdot (y) initial condition
+        x0: tuple of floats
+            Starting point (initial guess) for the automatic xlim computation
+        nb_pts_orbit: int
+            (Maximum) number of points for the orbit output. If None, the values at each time step
+            of the integrator will be used (faster)
+        Returns
+        -------
+        secs : array (N_orbits,2,N_points)
+            The surface of section. First dim indexes the orbits, second the variable (x,xdot),
+            third are the points
+        orbs: list (N_orbits,) of arrays (2,*)
+            Configuration-space orbits corresponding to the sections. List because the number of points
+            in the orbit is not constant (deps on the integration time that was required to reach
+            N_points crossings of the plane)
+        zvc: array (2,800)
+            Zero-velocity curve (limit of the section). Consists of (x,xdot) pairs that contour the
+            surface of section once.
+        """
+        if xlim is None:
+            xl = self.xlim(E,x0)
+        else:
+            xl = xlim
+        if xdot0 is None:
+            xdot = 0.
+        else:
+            xdot = xdot0
+        xx = np.linspace(xl[0],xl[1],N_orbits)
+        xxx = np.linspace(xl[0],xl[1],400) # TODO: find a way with less points
+        vx = self.vxlim(E,xxx)
+        zvc = np.array([np.hstack((xxx,xxx[::-1])),np.hstack((vx,-vx[::-1]))])
+        secs = np.empty((N_orbits,2,N_points))
+        orbs = []
+        for j,x in enumerate(xx):
+            s,o = self.integrate_orbit([x,xdot],E,N_points,nb_pts_orbit)
+            secs[j] = s
+            orbs.append(o)
+        return secs, orbs, zvc
     def xlim(self,E,x0=(-1,1)):
+        """Helper function to calculate physical x-limits at given energy
+
+        Use the condition E=phi with y=0, xdot=0 to compute the maximum
+        allowed values for x.
+        """
         def sp(x):
             A = np.zeros((4,x.shape[0]))
             A[0] = x
@@ -150,28 +241,12 @@ class PoincareMapper:
         else:
             return 0.99999*root
     def vxlim(self,E,x):
+        """Helper function to calculate xdot from x and E, with y=0
+        """
         ED = 2*(E-self.pot.phi([x,0.]))
         return np.sqrt(ED)
-        """if ED >= 0:
-            return np.sqrt(ED)
-        elif -1e-2 < ED < 0:
-            return 0.0
-        else:
-            raise ValueError("x is out of range")"""
 
-    def section(self,E,N_orbits=10,N_points=10,x0=(-1,1),nb_pts_orbit = 10000):
-        xl = self.xlim(E,x0)
-        xx = np.linspace(xl[0],xl[1],N_orbits)
-        xxx = np.linspace(xl[0],xl[1],400) # TODO: find a way with less points
-        vx = self.vxlim(E,xxx)
-        zvc = np.array([np.hstack((xxx,xxx[::-1])),np.hstack((vx,-vx[::-1]))])
-        secs = np.empty((N_orbits,2,N_points))
-        orbs = []
-        for j,x in enumerate(xx):
-            s,o = self.integrate_orbit([x,0],E,N_points,nb_pts_orbit)
-            secs[j] = s
-            orbs.append(o)
-        return secs, orbs, zvc
+    
 
 class PoincareCollection:
     """Container class for a collection of orbits/Poincare maps at multiple energies
@@ -331,7 +406,7 @@ class Tomography:
         self.textbox_setredraw.on_submit(self._setredraw)
 
         ax_redrawbutton = self.fig.add_axes([0.03, 0.225, 0.1, 0.075])
-        self.button_redraw = Button(ax_redrawbutton,'Redraw with\nN orbits',
+        self.button_redraw = Button(ax_redrawbutton,'Redraw current view\n with N orbits',
                     color='mistyrose',hovercolor='lightcoral')
         self.button_redraw.on_clicked(self._redrawmode)
         """axredrawbtn = self.fig.add_axes([0.0, 0.15, 0.1, 0.075])
@@ -410,20 +485,39 @@ class Tomography:
         print("Program was exited by the user")
         plt.close(self.fig)
     def _redrawmode(self,event):
+        if self._in_redrawmode:
+            self._clearredraw()
+        
         self._in_redrawmode = True
         for l in self.lines_sec:
             l.set_visible(False)
+        # Set xlim to current zoom
+        xl_phys = (np.amin(self._zvcl[self.idx,0]),np.amax(self._zvcl[self.idx,0]))
+        xl_fig = self.ax_sec.get_xlim()
+        vxl = self.ax_sec.get_ylim()
+        xl = (max(xl_fig[0],xl_phys[0]),min(xl_fig[1],xl_phys[1]))
+        print(xl)
+        xdot0 = (vxl[0] + vxl[1])/2.
+
         print("Recalculating...")
-        stmp,otmp,z = self.mapper.section(self._El[self.idx],N_orbits=self._Nredraw,N_points=len(self._sl[0][0][0]),nb_pts_orbit=None)
-        #self.lstmp = [self.ax_sec.plot(stmp[i][0], stmp[i][1],'o',ms=0.3,color='black')[0] for i in range(self._Nredraw)]
+        stmp,otmp,z = self.mapper.section(self._El[self.idx],N_orbits=self._Nredraw,N_points=len(self._sl[0][0][0]),nb_pts_orbit=None,xlim=xl,xdot0=xdot0)
         x = stmp[:,0,:].flatten()
         y = stmp[:,1,:].flatten()
-        self.lstmp = self.ax_sec.scatter(x, y,s=0.3,color='black')
+
+        # Coloring attempt
+        if 0:
+            dx2 = np.diff(stmp[:,0,:],prepend=0)**2
+            dy2 = np.diff(stmp[:,1,:],prepend=0)**2
+            dists = np.sqrt(dx2+dy2).flatten()
+            clr = dists
+        else: clr = 'black'
+        self.lstmp = self.ax_sec.scatter(x, y,s=0.3,c=clr)
         self.fig.canvas.draw()
+    def _clearredraw(self):
+        if hasattr(self,"lstmp"):
+            self.lstmp.remove()
     def _exitrdrw(self):
-        #for l in self.lstmp:
-        #    l.remove()
-        self.lstmp.remove()
+        self._clearredraw()
         delattr(self,"lstmp")
         self._in_redrawmode = False
         for l in self.lines_sec:
