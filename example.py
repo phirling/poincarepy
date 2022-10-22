@@ -8,9 +8,7 @@ from potentials import *
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
-        description="Poincare x vx Section"
-    )
-
+        description="Poincare x vx Section")
     # Integration Parameters (Collection parameters)
     parser.add_argument("-tf",type=float,default=100,help="Maximal integration time. If --no_count, this will be the obligatory final time")
     parser.add_argument("-N_points",type=int,default= 40,help="Terminate integration after n crossings of the plane (=nb of points in the Poincaré map)")
@@ -28,12 +26,11 @@ if __name__ == "__main__":
     parser.add_argument("-open",type=str,default=None)
 
     args = parser.parse_args()
-    # Define an event function (crossing of the y plane)
-    def event_yplanecross(t,y):
-        return y[1]
-    event_yplanecross.direction = 1
 
+
+    # Run without loading previous pkl file
     if args.open is None:
+
         # Define a potential
         r0 = (0,0)
         logpot = LogarithmicPotential(zeropos=r0)
@@ -41,7 +38,7 @@ if __name__ == "__main__":
         pot = CombinedPotential(logpot,rotpot)
 
         # Mapper with default parameters for integration time etc
-        mapper = PoincareMapper(pot,event_yplanecross)
+        mapper = PoincareMapper(pot)
 
         # Create Poincare sections over a range of energies
         energylist = np.linspace(args.Emin,args.Emax,args.N_E)
@@ -53,13 +50,15 @@ if __name__ == "__main__":
             orbitslist.append(o)
             sectionslist[j] = s
             zvclist[j] = zvc
-            
+        
+        # Create PoincareCollection object for convenient pickling
         col = PoincareCollection(energylist,orbitslist,sectionslist,zvclist,mapper)
 
         if args.save is not None:
             with open(args.save,'wb') as f:
                 pkl.dump(col,f)
 
+    # Run by loading previous pkl file
     else:
         with open(args.open,'rb') as f:
             col = pkl.load(f)
@@ -70,8 +69,5 @@ if __name__ == "__main__":
         energylist = col.energylist
         zvclist = col.zvc_list
     
-    # Tomographic plot
+    """ Show Results"""
     tom = Tomography(sectionslist,orbitslist,zvclist,energylist,mapper)
-    
-
-    plt.show()

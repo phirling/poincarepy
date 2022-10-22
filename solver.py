@@ -1,13 +1,12 @@
 import numpy as np
 from scipy.integrate._ivp.rk import DOP853
 from scipy.integrate._ivp.ivp import prepare_events, handle_events, find_active_events, OdeResult
-from scipy.optimize import OptimizeResult
 
 '''
 Custom wrapper around scipy's DOP853 integrator, largely inspired by the solve_ivp method
 but containing some additional features and discarding functionalities not required by this program.
 
-DISCLAIMER: Some portions of the code are taken litteraly from scipy's source,
+DISCLAIMER: Some portions of the code are copied as is from scipy's source,
             specifically scipy/integrate/ivp.py).
 
 Newly added:

@@ -1,7 +1,7 @@
 import solver
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
-from matplotlib.widgets import Button, TextBox
+from matplotlib.widgets import Button, TextBox, RectangleSelector
 from potentials import Potential
 import copy
 import numpy as np
@@ -249,12 +249,9 @@ class PoincareMapper:
     
 
 class PoincareCollection:
-    """Container class for a collection of orbits/Poincare maps at multiple energies
+    """Container class for a collection of surfaces of section and related data, used for pickling
 
-    This class is used to store the data corresponding to a collection of integrated orbits.
-    A collection is a list consisting of multiple sets of orbits, where one
-    set is at a given energy. The class also contains an array indicating the energies
-    corresponding to each set.
+    ##
 
     Parameters
     ----------
@@ -303,38 +300,38 @@ class PoincareCollection:
 
 
 class Tomography:
-    """Tomographic visualisation of a PoincareCollection
+    """Tomographic visualisation of an ensemble of surfaces of section at different energies
 
-    Class that contains a Poincare Collection and references to matplotlib
-    axes and is used to interactively pan through the collection's energy
-    levels, as well as to display orbits by clicking on the surfaces of section
+    ##
 
     Parameters
     ----------
-    ax_sec: matplotlib.Axes
-        Axes that should display the surfaces of section
-    ax_orb: matplotlib.Axes
-        Axes that should display the configuration space orbits
-    data: PoincareCollection
-        Collection that is imaged by the Tomography
+    sections: 4D-array (N_E,N_orbits,2,N_points)
+        Main data array, contains the points of the surfaces of section at every energy. First dim
+        indexes the energy, second the number of the orbit in the section, third x/xdot, fourth are
+        the data.
+    orbitslist: list (N_E,) of lists (N_orbits,) of arrays (2,*)
+        Configuration space orbits corresponding to the sections. Same layout but with lists, since
+        the data length of the individual orbits varies due to different integration times
+    zvclist: 3D-array (N_E,2,800)
+        Zero-velocity curves of each surface of section
+    energylist: array (N_E,)
+        Energies of the surfaces of section
+    mapper: PoincareMapper
+        PoincareMapper instance used to generate the data, required for the redrawing & orbit search
+        features.
+    figsize: tuple of floats, optional
+        Size of the figure in inches
     redraw_orbit: bool, optional
-        If orbit k is selected at some energy, this parameter decides whether to
-        redraw the new k-th orbit when the energy is changed. Not entirely physical
-        but can be interesting to visualize. Disabled for performance.
+        Whether to redraw a selected orbit when switching to a different energy. Default is true
 
     Attributes
     ----------
-    [parameters]
-    lines_sec: list of matplotlib.line2D
-        List of length nb_orbits_per_E artists that draw the points of a surface
-        of section. The points are updated every time the energy is changed.
-    line_orb: matplotlib.line2D
-        Artist that draws the orbit in ax_orb when a section is selected in ax_sec
-    idx: int
-        Index of the currently displayed energy level
+    ##
     
     Figure layout:
-    <0.03> margin <0.1> buttons <0.05> margin <0.36> axes <0.07> margin <0.36> axes <0.03> margin
+    Horizontal: <0.03> margin <0.1> buttons <0.05> margin <0.36> axes <0.07> margin <0.36> axes <0.03> margin
+    Vertical: <0.08> margin <*> axes
     """
     def __init__(self,sections: np.ndarray ,orbitslist, zvclist: np.ndarray,energylist, mapper: PoincareMapper, figsize=(15,7), redraw_orbit: bool = True) -> None:
         """ Load Data """
@@ -372,22 +369,22 @@ class Tomography:
         self.button_quit = Button(ax_quitbutton,"Quit",color='mistyrose',hovercolor='lightcoral')
         self.button_quit.on_clicked(self._quitfig)
         
-        # Set period with a Text box
+        # Set orbit search period with a Text box
         ax_setperiod = self.fig.add_axes([0.08, 0.325, 0.05, 0.05])
         self.textbox_setperiod = TextBox(ax_setperiod,'$p=$  ',color='mistyrose',
                     hovercolor='lightcoral', initial=1)
-        self.textbox_setperiod.on_submit(self._setperiod)
+        self.textbox_setperiod.on_submit(self._set_search_period)
         self._p = 1
 
-        # Button to enable/disable search mode
+        # Button to toggle search mode
         ax_searchbutton = self.fig.add_axes([0.03, 0.4, 0.1, 0.075])
         self.button_search = Button(ax_searchbutton,'Search for\np-periodic orbits',
                     color='mistyrose',hovercolor='lightcoral')
-        self.button_search.on_clicked(self._searchmode)
+        self.button_search.on_clicked(self._toggle_searchmode)
         self.line_psection, = self.ax_sec.plot([],[],'o',ms=4,color='mediumspringgreen')
         self._in_searchmode = False
 
-        # Interactivity (switch energy, click on section)
+        # Main Interactivity (switch energy, click on section)
         self._firstpick = True
         self.redraw_orbit = redraw_orbit
         self.idx = 0
@@ -395,28 +392,27 @@ class Tomography:
         self._pickid = self.fig.canvas.mpl_connect('pick_event',self._onpick)
         self._in_redrawmode = False
 
-        # Show lowest energy to start
-        self.show(0)
-
-        ### WIP
-        ax_setredraw = self.fig.add_axes([0.08, 0.15, 0.05, 0.05])
-        self.textbox_setredraw = TextBox(ax_setredraw,'$N=$  ',color='mistyrose',
+        # Redrawing Functions
+        ax_setredraw_N = self.fig.add_axes([0.08, 0.15, 0.05, 0.05])
+        self.textbox_setredraw = TextBox(ax_setredraw_N,'$N_{{Redraw}}=$  ',color='mistyrose',
                     hovercolor='lightcoral', initial=10)
         self._Nredraw = 10
-        self.textbox_setredraw.on_submit(self._setredraw)
+        self.textbox_setredraw.on_submit(self._set_redraw_N)
 
+        # Redraw current view
         ax_redrawbutton = self.fig.add_axes([0.03, 0.225, 0.1, 0.075])
-        self.button_redraw = Button(ax_redrawbutton,'Redraw current view\n with N orbits',
+        self.button_redraw = Button(ax_redrawbutton,'Redraw current\nview',
                     color='mistyrose',hovercolor='lightcoral')
-        self.button_redraw.on_clicked(self._redrawmode)
-        """axredrawbtn = self.fig.add_axes([0.0, 0.15, 0.1, 0.075])
-        self.redrawbtn = Button(axredrawbtn,'Redraw',color='mistyrose',hovercolor='lightcoral')
-        self.redrawbtn.on_clicked(self._zoommode)
-        self.fig.text(0.03,0.225,'Redraw current section\nwith N orbits:')
-        axredrawtext = self.fig.add_axes([0.03, 0.15, 0.1, 0.05])
-        self.redrawtext = TextBox(axredrawtext,'',
-                                color='mistyrose',hovercolor='lightcoral',
-                                initial=10)"""
+        self.button_redraw.on_clicked(self._redrawcurrent)
+
+        # Redraw rectangle selection
+        self._selector = RectangleSelector(self.ax_sec,self._selectandredraw)
+        self._selector.set_active(False)
+        self.fig.canvas.mpl_connect('key_press_event',self._toggle_rectsel)
+
+        # Show lowest energy to start
+        self.show(0)
+        plt.show()
         
     def __call__(self,event):
         """Interaction function to switch energy level by up/down keys
@@ -429,11 +425,11 @@ class Tomography:
         ii = self.idx
         if event.key == 'up':
             if self._in_redrawmode:
-                self._exitrdrw()
+                self._exit_redraw()
             ii += 1
         elif event.key == 'down':
             if self._in_redrawmode:
-                self._exitrdrw()
+                self._exit_redraw()
             ii -= 1
         if ii in range(self._nEn):
             self.show(ii)
@@ -484,13 +480,38 @@ class Tomography:
     def _quitfig(self,event):
         print("Program was exited by the user")
         plt.close(self.fig)
-    def _redrawmode(self,event):
+    
+    # Redrawing helper functions
+    def _redraw(self,x,y):
+        # Coloring attempt
+        """if 0:
+            dx2 = np.diff(stmp[:,0,:],prepend=0)**2
+            dy2 = np.diff(stmp[:,1,:],prepend=0)**2
+            dists = np.sqrt(dx2+dy2).flatten()
+            clr = dists"""
+        self.lstmp = self.ax_sec.scatter(x, y,s=0.3,c='black')
+        self.fig.canvas.draw()
+    def _clear_redraw(self):
+        if hasattr(self,"lstmp"):
+            self.lstmp.remove()
+    def _enter_redraw(self):
         if self._in_redrawmode:
-            self._clearredraw()
-        
+            self._clear_redraw()
         self._in_redrawmode = True
         for l in self.lines_sec:
             l.set_visible(False)
+    def _exit_redraw(self):
+        self._clear_redraw()
+        delattr(self,"lstmp")
+        self._in_redrawmode = False
+        for l in self.lines_sec:
+            l.set_visible(True)
+    def _set_redraw_N(self,N):
+        self._Nredraw = int(N)
+
+    # Redraw Current view (whole fig or zoom)
+    def _redrawcurrent(self,event):
+        self._enter_redraw()
         # Set xlim to current zoom
         xl_phys = (np.amin(self._zvcl[self.idx,0]),np.amax(self._zvcl[self.idx,0]))
         xl_fig = self.ax_sec.get_xlim()
@@ -498,39 +519,38 @@ class Tomography:
         xl = (max(xl_fig[0],xl_phys[0]),min(xl_fig[1],xl_phys[1]))
         print(xl)
         xdot0 = (vxl[0] + vxl[1])/2.
-
-        print("Recalculating...")
         stmp,otmp,z = self.mapper.section(self._El[self.idx],N_orbits=self._Nredraw,N_points=len(self._sl[0][0][0]),nb_pts_orbit=None,xlim=xl,xdot0=xdot0)
         x = stmp[:,0,:].flatten()
         y = stmp[:,1,:].flatten()
+        self._redraw(x,y)
 
-        # Coloring attempt
-        if 0:
-            dx2 = np.diff(stmp[:,0,:],prepend=0)**2
-            dy2 = np.diff(stmp[:,1,:],prepend=0)**2
-            dists = np.sqrt(dx2+dy2).flatten()
-            clr = dists
-        else: clr = 'black'
-        self.lstmp = self.ax_sec.scatter(x, y,s=0.3,c=clr)
-        self.fig.canvas.draw()
-    def _clearredraw(self):
-        if hasattr(self,"lstmp"):
-            self.lstmp.remove()
-    def _exitrdrw(self):
-        self._clearredraw()
-        delattr(self,"lstmp")
-        self._in_redrawmode = False
-        for l in self.lines_sec:
-            l.set_visible(True)
-    def _setredraw(self,N):
-        self._Nredraw = int(N)
-    def _setperiod(self,p):
+    # Redraw rectangle selection
+    def _toggle_rectsel(self,event):
+        if event.key == 't':
+            if self._selector.get_active() == False:
+                print("Entering select & redraw mode")
+                self._selector.set_active(True)
+            else:
+                print("Leaving select & redraw mode")
+                self._selector.set_active(False)
+    def _selectandredraw(self,eclick,erelease):
+        self._enter_redraw()
+        x1, y1 = eclick.xdata, eclick.ydata
+        x2, y2 = erelease.xdata, erelease.ydata
+        xdot0 = (y1+y2)/2.
+        stmp,otmp,z = self.mapper.section(self._El[self.idx],N_orbits=self._Nredraw,N_points=len(self._sl[0][0][0]),nb_pts_orbit=None,xlim=(x1,x2),xdot0=xdot0)
+        x = stmp[:,0,:].flatten()
+        y = stmp[:,1,:].flatten()
+        self._redraw(x,y)
+    
+    # Periodic Orbit search
+    def _set_search_period(self,p):
         self._p = int(p)
-    def _searchmode(self,event):
+    def _toggle_searchmode(self,event):
         if not self._in_searchmode:
             self.button_search.color = 'firebrick'
             self._in_searchmode = True
-            self._clickid = self.fig.canvas.mpl_connect('button_press_event',self._click)
+            self._clickid = self.fig.canvas.mpl_connect('button_press_event',self._search)
             self.line_orb.set_xdata([])
             self.line_orb.set_ydata([])
             self.line_psection.set_visible(True)
@@ -545,7 +565,7 @@ class Tomography:
             self.line_orb.set_ydata([])
             self.line_psection.set_visible(False)
             self._pickid = self.fig.canvas.mpl_connect('pick_event',self._onpick)
-    def _click(self,event):
+    def _search(self,event):
         if event.inaxes == self.ax_sec:
             E = self._El[self.idx]
             q0 = [event.xdata,event.ydata]
