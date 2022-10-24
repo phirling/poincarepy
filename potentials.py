@@ -28,12 +28,6 @@ class Potential:
                 y[3],
                 F[0],
                 F[1]])
-        return [y[2],
-                y[3],
-                F[0],
-                F[1]]
-    def get_energyrange(self):
-        pass
     def info(self):
         s = "Empty Potential"
         return(s)
@@ -57,21 +51,8 @@ class LogarithmicPotential(Potential):
         ax = A*y[0]
         ay = A*y[1]/(self.q**2)
         return np.array([ax,ay])
-    def get_energyrange(self):
-        Emin = self.phi(np.zeros(4))
-        Emax = np.inf
-        return np.array([Emin,Emax])
     def info(self):
         return("Logarithmic potential: v0 = {:.1f}, rc = {:.1f}, q  = {:.1f}".format(self.v0,self.rc,self.q))
-    # -- Convenience methods (specific) -- #
-    def maxval_x(self,E):
-        return np.sqrt(np.exp(2*E/self.v0**2)-self.rc**2)
-    def ydot(self,E,x,xdot):
-        ED = 2*(E-self.phi([x,0])) - xdot**2
-        if ED < 0:
-            return None
-        else:
-            return np.sqrt(ED)
 
 class HomospherePotential(Potential):
     """Potential of a homogeneous sphere
@@ -91,6 +72,7 @@ class HomospherePotential(Potential):
                 self.gaugeparam = 2*np.pi*G_grav*self.rho*(a*a - r0**2/3.)
             else:
                 self.gaugeparam = 4*np.pi*G_grav*self.rho*a**3/(3*r0)
+        print(self.gaugeparam)
     def phi(self, y):
         r = np.asarray(np.sqrt(y[0]**2 + y[1]**2))
         return np.where(r<=self.a,-2*np.pi*G_grav*self.rho*(self._a2 - r**2/3) + self.gaugeparam,
@@ -98,13 +80,25 @@ class HomospherePotential(Potential):
     def accel(self, y):
         r2 = np.asarray(y[0]**2 + y[1]**2)
         return np.where(r2<=self._a2,self._ff*y[0:2],-G_grav*self.M/r2**1.5*y[0:2])
-    def get_energyrange(self):
-        Emin = self.phi(np.zeros(4))
-        Emax = self.gaugeparam
-        return np.array([Emin,Emax])
     def info(self):
         return("Homosphere potential: a = {:.1f}, M = {:.1e}$".format(self.a,self.M))
 
+class PlummerPotential(Potential):
+    def __init__(self,a=5.,M=3e3,zeropos=None):
+        self.type = 'plummer'
+        self.a2=a*a
+        self.M=M
+        if zeropos is None:
+            self.gaugeparam = 0.0
+        else:
+            self.gaugeparam = G_grav*M/np.sqrt(self.a2 + zeropos[0]**2 + zeropos[1]**2)
+    def phi(self,y):
+        return -G_grav*self.M/np.sqrt(self.a2 + y[0]**2 + y[1]**2) + self.gaugeparam
+    def accel(self,y):
+        ff = -G_grav*self.M/((y[0]**2 + y[1]**2 + self.a2)**1.5)
+        return np.array([y[0]*ff,y[1]*ff])
+    def info(self):
+        return("Plummer potential: a = {:.1f}, M = {:.1e}$".format(self.a,self.M))
 class zRotation(Potential):
     """
     Coriolis: -2*Omega x V
@@ -123,14 +117,9 @@ class zRotation(Potential):
         return coriolis + centrif
     def phi(self, y):
         return -0.5*self.omega**2 * (y[0]**2 + y[1]**2) + self.gaugeparam
-    def get_energyrange(self):
-        Emin = -np.inf
-        Emax = self.gaugeparam
-        return np.array([Emin,Emax])
     def info(self):
         return "z-axis Rotation: omega = {:.1f}".format(self.omega)
 
-"""### EXPERIMENTAL ###"""
 class CombinedPotential(Potential):
     def __init__(self,*pots: Potential):
         self.type = 'combined'
@@ -153,7 +142,7 @@ class CombinedPotential(Potential):
         Emin = np.amin(sub)
         return np.array([Emin,Emax])
 
-
+"""### WIP ###"""
 class PointMassPotential(Potential):
     def __init__(self,M=1e3,zeropos=None):
         self.type = 'pointmass'
@@ -173,15 +162,3 @@ class PointMassPotential(Potential):
 
     def maxval_x(self,E):
         return G_grav*self.M/E
-
-class SummedPotential(Potential):
-    def __init__(self,pot1: Potential,pot2: Potential):
-        self.pot1 = pot1
-        self.pot2 = pot2
-    def accel(self, y):
-        return self.pot1.accel(y) + self.pot2.accel(y)
-    def phi(self, y):
-        return self.pot1.phi(y) + self.pot2.phi(y)
-    def info(self):
-        s = "Sum of potentials:\n  * " + self.pot1.info() + "\n  * " + self.pot2.info()
-        return(s)

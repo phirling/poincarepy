@@ -12,12 +12,12 @@ if __name__ == "__main__":
     # Integration Parameters (Collection parameters)
     parser.add_argument("-tf",type=float,default=100,help="Maximal integration time. If --no_count, this will be the obligatory final time")
     parser.add_argument("-N_points",type=int,default= 40,help="Terminate integration after n crossings of the plane (=nb of points in the Poincaré map)")
-    parser.add_argument("-N_orbits",type=int,default=11,help="Number of orbits to sample if --fill is passed")
+    parser.add_argument("-N_orbits",type=int,default=15,help="Number of orbits to sample if --fill is passed")
 
     # Tomography Parameters
     parser.add_argument("-Emin",type=float,default=30.)
-    parser.add_argument("-Emax",type=float,default=200.)
-    parser.add_argument("-N_E",type=int,default=3,help="Number of energy slices in tomographic mode")
+    parser.add_argument("-Emax",type=float,default=240.)
+    parser.add_argument("-N_E",type=int,default=20,help="Number of energy slices in tomographic mode")
     parser.add_argument("--no_orbit_redraw",action='store_false')
 
     # Script Parameters
@@ -35,8 +35,11 @@ if __name__ == "__main__":
         r0 = (0,0)
         logpot = LogarithmicPotential(zeropos=r0)
         rotpot = zRotation(0.3,zeropos=r0)
+        plumpot = PlummerPotential(zeropos=r0)
         pot = CombinedPotential(logpot,rotpot)
-        #pot = logpot
+        #pot = CombinedPotential(plumpot,rotpot)
+        #pot = CombinedPotential(plumpot,logpot,rotpot)
+        # ...
 
         # Mapper with default parameters for integration time etc
         mapper = PoincareMapper(pot)
@@ -45,8 +48,9 @@ if __name__ == "__main__":
         energylist = np.linspace(args.Emin,args.Emax,args.N_E)
         orbitslist = []
         sectionslist = np.empty((args.N_E,args.N_orbits,2,args.N_points))
-        zvclist = np.empty((args.N_E,2,800)) # 400 see in PoincareMapper (TODO)
+        zvclist = np.empty((args.N_E,2,800))
         for j,e in enumerate(energylist):
+            print("Generating Map #{:n} at E = {:.2f}".format(j,e))
             s,o,zvc = mapper.section(e,args.N_orbits,args.N_points)
             orbitslist.append(o)
             sectionslist[j] = s
