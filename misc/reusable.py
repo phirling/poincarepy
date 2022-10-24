@@ -16,3 +16,31 @@ def integrate_energy(pot,E,N_orbits,t_span,t_eval,event,event_count_max,xlim=Non
         orbits.append(res['y'][0:2])
         sections.append(res['y_events'][0][:,[0,2]].T)
     return orbits,sections
+
+     ## WIP
+    def _to_bdry(self,q,E,xlim,origin=(0.,0.)):
+        x0,y0 = origin[0],origin[1]
+        x1,y1 = q[0],q[1]
+        a,b = xlim[0],xlim[1]
+        if x1 < x0:
+            a = max(a,x1)
+            b = min(b,x0)
+        else:
+            a = max(a,x0)
+            b = min(b,x1)
+
+        print(a,b)
+        f = lambda x: np.sign(y1)*self.vxlim(E,x) - (y0*(x1-x) + y1*(x-x0))/(x1-x0)
+        mlt = 5
+        root = scpopt.brentq(f,a,b)
+        xb = root - mlt*np.sign(x1)*self._dx
+        yb = np.sign(y1)*self.vxlim(E,root) - mlt*np.sign(y1)*self._dvx
+        return xb,yb
+    def _manage_bdry(self,q,E,xlim,xtol=2e-3,ytol=2e-3):
+        x, y = q[0], q[1]
+        if q[0] < xlim[0] + xtol: x += xtol
+        elif q[0] > xlim[1] - xtol: x -= xtol
+        #zvc = self.vxlim(E,x)
+        #if q[1] < zvc + ytol: y += ytol
+        #elif q[1] > zvc - ytol: y -= ytol
+        return x,y

@@ -36,6 +36,7 @@ if __name__ == "__main__":
         logpot = LogarithmicPotential(zeropos=r0)
         rotpot = zRotation(0.3,zeropos=r0)
         pot = CombinedPotential(logpot,rotpot)
+        #pot = logpot
 
         # Mapper with default parameters for integration time etc
         mapper = PoincareMapper(pot)

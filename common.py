@@ -13,7 +13,7 @@ event_yplanecross.direction = 1
 
 class PoincareMapper:
     def __init__(self,pot: Potential,crossing_function = event_yplanecross,
-                 max_integ_time=200,dx=1e-3,dvx=1e-3) -> None:
+                 max_integ_time=200,dx=1e-8,dvx=1e-8) -> None:
         self.pot = pot
         self.maxtime = max_integ_time
         #self._evt = lambda t,y: crossing_function(t,y)
@@ -34,13 +34,15 @@ class PoincareMapper:
         
         Returns
         -------
-        q' : array (2,) or None
+        q' : array (2,)
             Result of the mapping. Returns None if the starting point was outside
             of the zero-velocity curve of the potential at energy E
         """
         ED = 2*(E-self.pot.phi([q[0],0.])) - q[1]**2
         if ED < 0:
+            print("Cannot compute map (point outside ZVC)")
             return None
+            #raise ValueError("Attempted to map a point outside ZVC")
         else:
             y0 = [q[0],0.,q[1],np.sqrt(ED)]
             res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1)
@@ -62,12 +64,17 @@ class PoincareMapper:
             Jacobian matrix of the mapping. Returns None if the starting point was
             outside of the zero-velocity curve of the potential at energy E
         """
-        if self.map(q,E,N) is None: return None # Need to deal with finite diffs outside zero vel curve
+        if not self._is_allowed(q,E):
+            print("Cannot compute Jacobian (point outside ZVC)")
+            return None
         Txf = self.map([q[0]+self._dx,q[1]],E,N)
         Txb = self.map([q[0]-self._dx,q[1]],E,N)
         Tvxf = self.map([q[0],q[1]+self._dvx],E,N)
         Tvxb = self.map([q[0],q[1]-self._dvx],E,N)
-        #print([Txf,Txb,Tvxf,Tvxb])
+        #if Txf is None or Txb is None or Tvxf is None or Tvxb is None:
+        if np.any([Txf,Txb,Tvxf,Tvxb] is None):
+            print("Cannot compute Jacobian (neighbourhood too close to ZVC)")
+            return None
         J00 = (Txf[0] - Txb[0]) / (2*self._dx)
         J01 = (Tvxf[0] - Tvxb[0]) / (2*self._dvx)
         J10 = (Txf[1] - Txb[1]) / (2*self._dx)
@@ -101,18 +108,19 @@ class PoincareMapper:
             of the potential at energy E or if the search reached its maximum
             number of allowed iterations.
         """
-        if self.map(q0,E,N) is None: return None
+        if not self._is_allowed(q0,E):
+            print("Search starting point outside ZVC")
+            return
         F = lambda q: self.map(q,E,N) - q
         dF = lambda q: self.jac(q,E,N) - np.identity(2)
         ii = 0
-        qn = np.asarray(q0)
-        deltq = q0
+        qn = q0
+        deltq = np.ones(2)
         while np.linalg.norm(deltq) > eps:
             ii += 1
             deltq = scpopt.lsq_linear(dF(qn),-F(qn))['x']
-            # Check if the new point lies outside zero-vel curve
-            while self.map(qn + deltq,E,N) is None:
-                deltq /= 4.
+            while self.jac(qn + deltq,E,N) is None:
+                deltq /= 2
             qn += deltq
             if ii > maxiter:
                 print("Maximum number of iterations reached")
@@ -213,7 +221,7 @@ class PoincareMapper:
             xdot = xdot0
         xx = np.linspace(xl[0],xl[1],N_orbits)
         xxx = np.linspace(xl[0],xl[1],400) # TODO: find a way with less points
-        vx = self.vxlim(E,xxx)
+        vx = self.zvc(E,xxx)
         zvc = np.array([np.hstack((xxx,xxx[::-1])),np.hstack((vx,-vx[::-1]))])
         secs = np.empty((N_orbits,2,N_points))
         orbs = []
@@ -240,13 +248,16 @@ class PoincareMapper:
             return None
         else:
             return 0.99999*root
-    def vxlim(self,E,x):
-        """Helper function to calculate xdot from x and E, with y=0
+    def zvc(self,E,x):
+        """Helper function to calculate zero velocity curve
         """
         ED = 2*(E-self.pot.phi([x,0.]))
         return np.sqrt(ED)
 
-    
+    def _is_allowed(self,q,E):
+        ED = 2*(E-self.pot.phi([q[0],0.])) - q[1]**2
+        if ED < 0: return False
+        else: return True
 
 class PoincareCollection:
     """Container class for a collection of surfaces of section and related data, used for pickling
@@ -333,7 +344,7 @@ class Tomography:
     Horizontal: <0.03> margin <0.1> buttons <0.05> margin <0.36> axes <0.07> margin <0.36> axes <0.03> margin
     Vertical: <0.08> margin <*> axes
     """
-    def __init__(self,sections: np.ndarray ,orbitslist, zvclist: np.ndarray,energylist, mapper: PoincareMapper, figsize=(15,7), redraw_orbit: bool = True) -> None:
+    def __init__(self,sections: np.ndarray ,orbitslist, zvclist: np.ndarray,energylist, mapper: PoincareMapper, figsize=(12.5,6), redraw_orbit: bool = True) -> None:
         """ Load Data """
         self._sl = sections
         self._ol = orbitslist
@@ -352,7 +363,7 @@ class Tomography:
         self.ax_sec = self.fig.add_axes([0.18,0.08,axw,axw * aspct])
         self.ax_orb = self.fig.add_axes([0.61,0.08,axw,axw * aspct])
         self.ax_orb.axis('equal')
-        ffs = 16
+        ffs = 14
         self.ax_sec.set_xlabel("$x$",fontsize=ffs)
         self.ax_sec.set_ylabel("$\dot{x}$",fontsize=ffs)
         self.ax_orb.set_xlabel("$x$",fontsize=ffs)
@@ -410,6 +421,12 @@ class Tomography:
         self._selector.set_active(False)
         self.fig.canvas.mpl_connect('key_press_event',self._toggle_rectsel)
 
+        # Redraw single orbit
+        self._singleredrawmode = False
+        self.fig.canvas.mpl_connect('key_press_event',self._toggle_singleredraw)
+
+        # Info
+        #infotxt = self.fig.text(0.03,0.5,"Navigation:\nup/down: Switch Energy level\nt: Rectangle select & redraw\nz: Single orbit redraw")
         # Show lowest energy to start
         self.show(0)
         plt.show()
@@ -421,19 +438,21 @@ class Tomography:
         event : matplotlib.key_press_event
             Up or down key press event
         """
-        
+        up = event.key == 'up'
+        down = event.key == 'down'
         ii = self.idx
-        if event.key == 'up':
-            if self._in_redrawmode:
-                self._exit_redraw()
+        if up:
             ii += 1
-        elif event.key == 'down':
+        elif down:      
+            ii -= 1
+        if up or down:
             if self._in_redrawmode:
                 self._exit_redraw()
-            ii -= 1
-        if ii in range(self._nEn):
-            self.show(ii)
-            self.idx = ii
+            if ii in range(self._nEn):
+                self.line_psection.set_xdata([])
+                self.line_psection.set_ydata([])
+                self.show(ii)
+                self.idx = ii
     def show(self,idx):
         """Function that updates the plot when energy is changed
         Parameters
@@ -447,8 +466,10 @@ class Tomography:
             l.set_ydata(self._sl[idx,k,1])
         self.line_zvc.set_xdata(self._zvcl[idx,0])
         self.line_zvc.set_ydata(self._zvcl[idx,1])
-        self.ax_sec.relim()
-        self.ax_sec.autoscale()
+        # Set ax limits to 1.05*zero velocity curve
+        mgn = 1.05
+        self.ax_sec.set_xlim(mgn*self._zvcl[idx,0,0],mgn*self._zvcl[idx,0,399])
+        self.ax_sec.set_ylim(mgn*self._zvcl[idx,1,599],mgn*self._zvcl[idx,1,199])
         if not self._firstpick and self.redraw_orbit:
             self.line_orb.set_xdata(self._ol[idx][self.artistid][0])
             self.line_orb.set_ydata(self._ol[idx][self.artistid][1])
@@ -470,10 +491,7 @@ class Tomography:
         event.artist.set_color('orangered')
         event.artist.set_markersize(1.5)
         self.artistid = self.lines_sec.index(event.artist)
-        self.line_orb.set_xdata(self._ol[self.idx][self.artistid][0])
-        self.line_orb.set_ydata(self._ol[self.idx][self.artistid][1])
-        self.ax_orb.relim()
-        self.ax_orb.autoscale()
+        self._set_orb(self._ol[self.idx][self.artistid])
         self.fig.canvas.draw()
         self.prev_artist = event.artist
 
@@ -482,24 +500,20 @@ class Tomography:
         plt.close(self.fig)
     
     # Redrawing helper functions
-    def _redraw(self,x,y):
-        # Coloring attempt
-        """if 0:
-            dx2 = np.diff(stmp[:,0,:],prepend=0)**2
-            dy2 = np.diff(stmp[:,1,:],prepend=0)**2
-            dists = np.sqrt(dx2+dy2).flatten()
-            clr = dists"""
-        self.lstmp = self.ax_sec.scatter(x, y,s=0.3,c='black')
+    def _redraw(self,x,y,orbit=None,hide_other=True,s=0.3,c='black'):
+        if self._in_redrawmode:
+            self._clear_redraw()
+        else:
+            self._in_redrawmode = True
+            if hide_other:
+                for l in self.lines_sec:
+                    l.set_visible(False)
+        self.lstmp = self.ax_sec.scatter(x, y,s=s,c=c)
+        if orbit is not None: self._set_orb(orbit)
         self.fig.canvas.draw()
     def _clear_redraw(self):
         if hasattr(self,"lstmp"):
             self.lstmp.remove()
-    def _enter_redraw(self):
-        if self._in_redrawmode:
-            self._clear_redraw()
-        self._in_redrawmode = True
-        for l in self.lines_sec:
-            l.set_visible(False)
     def _exit_redraw(self):
         self._clear_redraw()
         delattr(self,"lstmp")
@@ -511,7 +525,6 @@ class Tomography:
 
     # Redraw Current view (whole fig or zoom)
     def _redrawcurrent(self,event):
-        self._enter_redraw()
         # Set xlim to current zoom
         xl_phys = (np.amin(self._zvcl[self.idx,0]),np.amax(self._zvcl[self.idx,0]))
         xl_fig = self.ax_sec.get_xlim()
@@ -534,7 +547,6 @@ class Tomography:
                 print("Leaving select & redraw mode")
                 self._selector.set_active(False)
     def _selectandredraw(self,eclick,erelease):
-        self._enter_redraw()
         x1, y1 = eclick.xdata, eclick.ydata
         x2, y2 = erelease.xdata, erelease.ydata
         xdot0 = (y1+y2)/2.
@@ -543,6 +555,25 @@ class Tomography:
         y = stmp[:,1,:].flatten()
         self._redraw(x,y)
     
+    # Draw single additional orbit
+    def _toggle_singleredraw(self,event):
+        if event.key == 'z':
+            if self._singleredrawmode == False:
+                print("Entering single orbit redraw mode")
+                self._singleredrawmode = True
+                self.fig.canvas.mpl_disconnect(self._pickid)
+                self._singleredrawid = self.fig.canvas.mpl_connect('button_press_event',self._singleredraw)
+            else:
+                print("Leaving single orbit redraw mode")
+                self._singleredrawmode = False
+                self._pickid = self.fig.canvas.mpl_connect('pick_event',self._onpick)
+                self.fig.canvas.mpl_disconnect(self._singleredrawid)
+                self._exit_redraw()
+    def _singleredraw(self,event):
+        q0 = [event.xdata,event.ydata]
+        s,o = self.mapper.integrate_orbit(q0,self._El[self.idx],len(self._sl[0][0][0]))
+        self._redraw(s[0],s[1],o,hide_other=False,s=5,c='rebeccapurple')
+
     # Periodic Orbit search
     def _set_search_period(self,p):
         self._p = int(p)
@@ -568,23 +599,24 @@ class Tomography:
     def _search(self,event):
         if event.inaxes == self.ax_sec:
             E = self._El[self.idx]
-            q0 = [event.xdata,event.ydata]
+            q0 = [event.xdata,event.ydata]           
             qstar = self.mapper.find_periodic_orbit(q0,E,
                     self._p,print_progress=True,eps=1e-3,maxiter=100)
             if qstar is not None:
-                #self.line_psection.set_xdata(qstar[0])
-                #self.line_psection.set_ydata(qstar[1])
-                if 1:
+                if 0:
+                    # TODO: stability
                     eigvals = np.linalg.eigvals(self.mapper.jac(qstar,E,self._p))
                     print(eigvals)
                     print(np.abs(eigvals))
                 s,o = self.mapper.integrate_orbit(qstar,E,N=5*self._p)
                 self.line_psection.set_xdata(s[0])
                 self.line_psection.set_ydata(s[1])
-                self.line_orb.set_xdata(o[0])
-                self.line_orb.set_ydata(o[1])
-                self.line_orb.axes.relim()
-                self.line_orb.axes.autoscale()
+                self._set_orb(o)
                 self.fig.canvas.draw()
             else:
                 print("The orbit finder did not converge with the provided starting guess")
+    def _set_orb(self,o):
+        self.line_orb.set_xdata(o[0])
+        self.line_orb.set_ydata(o[1])
+        self.line_orb.axes.relim()
+        self.line_orb.axes.autoscale()
