@@ -601,7 +601,8 @@ class Tomography:
             E = self._El[self.idx]
             q0 = [event.xdata,event.ydata]           
             qstar = self.mapper.find_periodic_orbit(q0,E,
-                    self._p,print_progress=True,eps=1e-3,maxiter=100)
+                    self._p,print_progress=True,eps=1e-3,
+                    maxiter=100,print_result=True)
             if qstar is not None:
                 if 0:
                     # TODO: stability

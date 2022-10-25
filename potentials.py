@@ -141,6 +141,13 @@ class CombinedPotential(Potential):
         Emax = np.amax(sub)
         Emin = np.amin(sub)
         return np.array([Emin,Emax])
+    def info(self):
+        s1 = "-- Combined potential of --\n"
+        s = ""
+        for p in self.potentials:
+            s += p.info()
+            s += "\n"
+        return s1 + s
 
 """### WIP ###"""
 class PointMassPotential(Potential):

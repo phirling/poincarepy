@@ -10,7 +10,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser(
         description="Poincare x vx Section")
     # Integration Parameters (Collection parameters)
-    parser.add_argument("-tf",type=float,default=100,help="Maximal integration time. If --no_count, this will be the obligatory final time")
+    parser.add_argument("-tmax",type=float,default=200,help="Maximal integration time. If --no_count, this will be the obligatory final time")
     parser.add_argument("-N_points",type=int,default= 40,help="Terminate integration after n crossings of the plane (=nb of points in the Poincaré map)")
     parser.add_argument("-N_orbits",type=int,default=15,help="Number of orbits to sample if --fill is passed")
 
@@ -42,15 +42,25 @@ if __name__ == "__main__":
         # ...
 
         # Mapper with default parameters for integration time etc
-        mapper = PoincareMapper(pot)
+        mapper = PoincareMapper(pot,max_integ_time=args.tmax)
 
+        # Print some info
+        print("Generating {:n} Poincare maps in the potential:\n".format(args.N_E))
+        print(pot.info())
+        print("from E={:.2f} to E={:.2f}, with {:n} orbits per map and {:n} points (crossings) per map.".format(args.Emin,args.Emax,args.N_orbits,args.N_points))
+        print("Maximum integration time is t_max={:.2f}".format(args.tmax),end="")
+        if args.save is not None:
+            print(", output will be saved to " + args.save + ".")
+        else:
+            print(", output will not be saved.")
+        
         # Create Poincare sections over a range of energies
         energylist = np.linspace(args.Emin,args.Emax,args.N_E)
         orbitslist = []
         sectionslist = np.empty((args.N_E,args.N_orbits,2,args.N_points))
         zvclist = np.empty((args.N_E,2,800))
         for j,e in enumerate(energylist):
-            print("Generating Map #{:n} at E = {:.2f}".format(j,e))
+            print("Map #{:n} at E = {:.2f}".format(j,e))
             s,o,zvc = mapper.section(e,args.N_orbits,args.N_points)
             orbitslist.append(o)
             sectionslist[j] = s
