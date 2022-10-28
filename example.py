@@ -2,8 +2,8 @@ import numpy as np
 import matplotlib.pyplot as plt
 import argparse
 import pickle as pkl
-from common import PoincareCollection, Tomography, PoincareMapper
-from potentials import *
+from poincarepy import PoincareCollection, Tomography, PoincareMapper
+import poincarepy.potentials as potentials
 
 
 if __name__ == "__main__":
@@ -33,14 +33,14 @@ if __name__ == "__main__":
 
         # Define a potential
         r0 = (0,0)
-        logpot = LogarithmicPotential(zeropos=r0)
-        rotpot = zRotation(0.3,zeropos=r0)
-        plumpot = PlummerPotential(zeropos=r0)
-        #pot = CombinedPotential(logpot,rotpot)
-        #pot = CombinedPotential(plumpot,rotpot)
-        #pot = CombinedPotential(plumpot,logpot,rotpot)
+        logpot = potentials.LogarithmicPotential(zeropos=r0)
+        rotpot = potentials.zRotation(0.3,zeropos=r0)
+        plumpot = potentials.PlummerPotential(zeropos=r0)
+        pot = potentials.CombinedPotential(logpot,rotpot)
+        #pot = potentials.CombinedPotential(plumpot,rotpot)
+        #pot = potentials.CombinedPotential(plumpot,logpot,rotpot)
         # ...
-        pot = plumpot
+        #pot = plumpot
 
         # Mapper with default parameters for integration time etc
         mapper = PoincareMapper(pot,max_integ_time=args.tmax)
@@ -78,4 +78,5 @@ if __name__ == "__main__":
         zvcs = col.zvc_list
     
     """ Show Results"""
-    tom = Tomography(sections,orbits,zvcs,energies,mapper,title="Rotating Logarithmic Potential")
+    polar_axlabels = ["$r$","$\dot{r}$","$r$","$z$"]
+    tom = Tomography(sections,orbits,zvcs,energies,mapper,title="Rotating Logarithmic Potential",axlabels=polar_axlabels)

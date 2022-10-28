@@ -5,6 +5,7 @@ __pycache__/
 
 # Ignore old files
 old/
+misc/
 # C extensions
 *.so
 

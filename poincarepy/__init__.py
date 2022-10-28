@@ -1,8 +1,9 @@
-import solver
+from poincarepy import solver
+from poincarepy import potentials as pot
+
 import matplotlib.pyplot as plt
 from matplotlib.axes import Axes
 from matplotlib.widgets import Button, TextBox, RectangleSelector
-from potentials import Potential
 import copy
 import numpy as np
 import scipy.optimize as scpopt
@@ -13,7 +14,7 @@ def event_yplanecross(t,y):
 event_yplanecross.direction = 1
 
 class PoincareMapper:
-    def __init__(self,pot: Potential,crossing_function = event_yplanecross,
+    def __init__(self,pot: pot.Potential,crossing_function = event_yplanecross,
                  max_integ_time=200,dx=1e-8,dvx=1e-8) -> None:
         self.pot = pot
         self.maxtime = max_integ_time
@@ -397,7 +398,9 @@ class Tomography:
     Horizontal: <0.03> margin <0.1> buttons <0.05> margin <0.36> axes <0.07> margin <0.36> axes <0.03> margin
     Vertical: <0.08> margin <*> axes
     """
-    def __init__(self,sections: np.ndarray ,orbits, zvcs: np.ndarray,energies, mapper: PoincareMapper, figsize=(12.5,6),title=None, redraw_orbit: bool = True) -> None:
+    def __init__(self,sections: np.ndarray ,orbits, zvcs: np.ndarray,energies, mapper: PoincareMapper,
+                 figsize=(12.5,6),title=None, redraw_orbit: bool = True,
+                 axlabels=["$x$","$\dot{x}$","$x$","$y$"]) -> None:
         """ Load Data """
         self._sl = sections
         self._ol = orbits
@@ -419,14 +422,14 @@ class Tomography:
         self.ax_pot = self.fig.add_axes([0.035,0.56,0.15,0.365])
         self.ax_orb.axis('equal')
         ffs = 14
-        self.ax_sec.set_xlabel("$x$",fontsize=ffs)
-        self.ax_sec.set_ylabel("$\dot{x}$",fontsize=ffs)
-        self.ax_orb.set_xlabel("$x$",fontsize=ffs)
-        self.ax_orb.set_ylabel("$y$",fontsize=ffs)
+        self.ax_sec.set_xlabel(axlabels[0],fontsize=ffs)
+        self.ax_sec.set_ylabel(axlabels[1],fontsize=ffs)
+        self.ax_orb.set_xlabel(axlabels[2],fontsize=ffs)
+        self.ax_orb.set_ylabel(axlabels[3],fontsize=ffs)
         self.ax_sec.set_title("Section Plane",fontsize=ffs)
         self.ax_orb.set_title("Orbital Plane",fontsize=ffs)
-        self.ax_pot.set_xlabel("$x$")
-        self.ax_pot.set_title("Potential $\phi(x,0)$")
+        self.ax_pot.set_xlabel(axlabels[0])
+        self.ax_pot.set_title("$\phi$")
         if title is not None:
             self.fig.text(0.6,axw * aspct + 0.2,title,fontsize=ffs+5,ha='center')
 
