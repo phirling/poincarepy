@@ -6,6 +6,7 @@ from potentials import Potential
 import copy
 import numpy as np
 import scipy.optimize as scpopt
+from tqdm import tqdm
 
 def event_yplanecross(t,y):
         return y[1]
@@ -171,7 +172,7 @@ class PoincareMapper:
             y0 = [q[0],0.,q[1],np.sqrt(ED)]
             res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1,t_eval=t_eval)
             return res['y_events'][0][1:,[0,2]].T, res['y'][0:2] # Exclude first event
-    def section(self,E,N_orbits=10,N_points=10,xlim=None,xdot0=None,x0=(-1,1),nb_pts_orbit = 10000):
+    def section(self,E,N_orbits=10,N_points=10,xlim=None,xdot=0.,x0=(-1,1),nb_pts_orbit = 10000,print_progress=False):
         """Calculate a surface of section at given energy
 
         A surface of section is a collection of N_orbits orbits that fill a given region of
@@ -191,10 +192,10 @@ class PoincareMapper:
         xlim: tuple of floats
             x-limits of the initial conditions. If none are provided, the maximum physically allowed
             values are computed from E=phi
-        xdot0: float
+        xdot: float
             Constant scalar value for the xdot (y) initial condition
         x0: tuple of floats
-            Starting point (initial guess) for the automatic xlim computation
+            Initial guess for the automatic xlim computation
         nb_pts_orbit: int
             (Maximum) number of points for the orbit output. If None, the values at each time step
             of the integrator will be used (faster)
@@ -212,25 +213,76 @@ class PoincareMapper:
             surface of section once.
         """
         if xlim is None:
-            xl = self.xlim(E,x0)
+            xl = self.xlim(E,xdot,x0)
         else:
-            xl = xlim
-        if xdot0 is None:
-            xdot = 0.
-        else:
-            xdot = xdot0
+            xl = np.asarray(xlim)
+        if not self._is_allowed([xl,0,xdot,0],E):
+            raise ValueError("The provided xlim/xdot lie outside the allowed ZVC")
         xx = np.linspace(xl[0],xl[1],N_orbits)
         xxx = np.linspace(xl[0],xl[1],400) # TODO: find a way with less points
         vx = self.zvc(E,xxx)
         zvc = np.array([np.hstack((xxx,xxx[::-1])),np.hstack((vx,-vx[::-1]))])
         secs = np.empty((N_orbits,2,N_points))
         orbs = []
-        for j,x in enumerate(xx):
+        if print_progress:
+            pp = lambda x: tqdm(x)
+        else:
+            pp = lambda x: x
+        for j,x in enumerate(pp(xx)):
             s,o = self.integrate_orbit([x,xdot],E,N_points,nb_pts_orbit)
             secs[j] = s
             orbs.append(o)
         return secs, orbs, zvc
-    def xlim(self,E,x0=(-1,1)):
+    def section_collection(self,E,N_orbits=10,N_points=10,xlim=None,xdot=0.,x0=(-1,1),nb_pts_orbit = 10000):
+        """Calculate a set of sections at different energies
+
+        ##
+
+        Parameters
+        ----------
+        E : array
+            Energies of the sections
+        N_orbits: int
+            Number of orbits in each surface of section
+        N_points: int
+            Number of points per orbit in the maps (e.g number of crossings of the section plane)
+        xlim: array of tuples
+            x-limits of the initial conditions. If none are provided, the maximum physically allowed
+            values are computed from E=phi
+        xdot: array
+            Constant scalar values for the xdot (y) initial condition, used if xlim is explicitely provided
+        x0: array of tuples
+            Starting point (initial guess) for the automatic xlim computation
+        nb_pts_orbit: int
+            (Maximum) number of points for the orbit output. If None, the values at each time step
+            of the integrator will be used (faster)
+        Returns
+        -------
+        sections : array (N_energies,N_orbits,2,N_points)
+            The surface of section. First dim indexes the orbits, second the variable (x,xdot),
+            third are the points
+        orbits: list (N_energies,N_orbits) of arrays (2,*)
+            Configuration-space orbits corresponding to the sections. List because the number of points
+            in the orbit is not constant (deps on the integration time that was required to reach
+            N_points crossings of the plane)
+        zvcs: array (N_energies,2,800)
+            Zero-velocity curves (limits of the sections). Each entry consists of (x,xdot) pairs that
+            contour that surface of section once.
+        
+        """
+        N_E = E.shape[0]
+        orbits = []
+        sections = np.empty((N_E,N_orbits,2,N_points))
+        zvcs = np.empty((N_E,2,800))
+        for j,e in enumerate(tqdm(E)):
+            #print("Map #{:n} at E = {:.2f}".format(j+1,e))
+            s,o,zvc = self.section(e,N_orbits,N_points,xlim,xdot,x0,nb_pts_orbit)
+            orbits.append(o)
+            sections[j] = s
+            zvcs[j] = zvc
+        return sections,orbits,zvcs
+
+    def xlim(self,E,xdot,x0=(-1,1)):
         """Helper function to calculate physical x-limits at given energy
 
         Use the condition E=phi with y=0, xdot=0 to compute the maximum
@@ -239,6 +291,7 @@ class PoincareMapper:
         def sp(x):
             A = np.zeros((4,x.shape[0]))
             A[0] = x
+            A[2] = xdot
             return A
         g = lambda x: E-self.pot.phi(sp(x)[0:2])
         gprime = lambda x: self.pot.accel(sp(x))[0]
@@ -256,7 +309,7 @@ class PoincareMapper:
 
     def _is_allowed(self,q,E):
         ED = 2*(E-self.pot.phi([q[0],0.])) - q[1]**2
-        if ED < 0: return False
+        if np.any(ED < 0): return False
         else: return True
 
 class PoincareCollection:
@@ -319,14 +372,14 @@ class Tomography:
     ----------
     sections: 4D-array (N_E,N_orbits,2,N_points)
         Main data array, contains the points of the surfaces of section at every energy. First dim
-        indexes the energy, second the number of the orbit in the section, third x/xdot, fourth are
+        indexes the energy, second the number of the orbit in the section, third the coordinate, fourth are
         the data.
-    orbitslist: list (N_E,) of lists (N_orbits,) of arrays (2,*)
+    orbits: list (N_E,) of lists (N_orbits,) of arrays (2,*)
         Configuration space orbits corresponding to the sections. Same layout but with lists, since
         the data length of the individual orbits varies due to different integration times
-    zvclist: 3D-array (N_E,2,800)
+    zvcs: 3D-array (N_E,2,800)
         Zero-velocity curves of each surface of section
-    energylist: array (N_E,)
+    energies: array (N_E,)
         Energies of the surfaces of section
     mapper: PoincareMapper
         PoincareMapper instance used to generate the data, required for the redrawing & orbit search
@@ -344,12 +397,12 @@ class Tomography:
     Horizontal: <0.03> margin <0.1> buttons <0.05> margin <0.36> axes <0.07> margin <0.36> axes <0.03> margin
     Vertical: <0.08> margin <*> axes
     """
-    def __init__(self,sections: np.ndarray ,orbitslist, zvclist: np.ndarray,energylist, mapper: PoincareMapper, figsize=(12.5,6), redraw_orbit: bool = True) -> None:
+    def __init__(self,sections: np.ndarray ,orbits, zvcs: np.ndarray,energies, mapper: PoincareMapper, figsize=(12.5,6),title=None, redraw_orbit: bool = True) -> None:
         """ Load Data """
         self._sl = sections
-        self._ol = orbitslist
-        self._zvcl = zvclist
-        self._El = energylist
+        self._ol = orbits
+        self._zvcl = zvcs
+        self._El = energies
         self.mapper = mapper
         
         self._nEn = len(sections)
@@ -359,9 +412,11 @@ class Tomography:
         # Main fig & axes
         self.fig = plt.figure(figsize=figsize)
         aspct = figsize[0] / figsize[1]
-        axw = 0.36
-        self.ax_sec = self.fig.add_axes([0.18,0.08,axw,axw * aspct])
-        self.ax_orb = self.fig.add_axes([0.61,0.08,axw,axw * aspct])
+        axw = 0.33
+        axstart = 0.1
+        self.ax_sec = self.fig.add_axes([0.23,0.1,axw,axw * aspct])
+        self.ax_orb = self.fig.add_axes([0.64,0.1,axw,axw * aspct])
+        self.ax_pot = self.fig.add_axes([0.035,0.56,0.15,0.365])
         self.ax_orb.axis('equal')
         ffs = 14
         self.ax_sec.set_xlabel("$x$",fontsize=ffs)
@@ -370,25 +425,36 @@ class Tomography:
         self.ax_orb.set_ylabel("$y$",fontsize=ffs)
         self.ax_sec.set_title("Section Plane",fontsize=ffs)
         self.ax_orb.set_title("Orbital Plane",fontsize=ffs)
+        self.ax_pot.set_xlabel("$x$")
+        self.ax_pot.set_title("Potential $\phi(x,0)$")
+        if title is not None:
+            self.fig.text(0.6,axw * aspct + 0.2,title,fontsize=ffs+5,ha='center')
 
         self.lines_sec = [self.ax_sec.plot([], [],'o',ms=0.3,color='black',picker=True,pickradius=5)[0] for i in range(self._nSec)]
         self.line_orb = self.ax_orb.plot([], [],lw=1,color='tomato')[0]
         self.line_zvc = self.ax_sec.plot([], [],lw=0.5,color='indianred')[0]
 
+        # Potential
+        xm,xp = zvcs[-1,0,0],zvcs[-1,0,399]
+        xpot = np.linspace(1.05*xm,1.05*xp,100)
+        phi = self.mapper.pot.phi([xpot,0])
+        self.ax_pot.plot(xpot,phi,color='black')
+        self.Eline = self.ax_pot.axhline(self._El[0],color='indianred')
+
         # Quit button
-        ax_quitbutton = self.fig.add_axes([0.03, 0.05, 0.1, 0.075])
+        ax_quitbutton = self.fig.add_axes([0.035, 0.05, 0.12, 0.075])
         self.button_quit = Button(ax_quitbutton,"Quit",color='mistyrose',hovercolor='lightcoral')
         self.button_quit.on_clicked(self._quitfig)
         
         # Set orbit search period with a Text box
-        ax_setperiod = self.fig.add_axes([0.08, 0.325, 0.05, 0.05])
+        ax_setperiod = self.fig.add_axes([0.095, 0.325, 0.06, 0.05])
         self.textbox_setperiod = TextBox(ax_setperiod,'$p=$  ',color='mistyrose',
                     hovercolor='lightcoral', initial=1)
         self.textbox_setperiod.on_submit(self._set_search_period)
         self._p = 1
 
         # Button to toggle search mode
-        ax_searchbutton = self.fig.add_axes([0.03, 0.4, 0.1, 0.075])
+        ax_searchbutton = self.fig.add_axes([0.035, 0.4, 0.12, 0.075])
         self.button_search = Button(ax_searchbutton,'Search for\np-periodic orbits',
                     color='mistyrose',hovercolor='lightcoral')
         self.button_search.on_clicked(self._toggle_searchmode)
@@ -404,14 +470,14 @@ class Tomography:
         self._in_redrawmode = False
 
         # Redrawing Functions
-        ax_setredraw_N = self.fig.add_axes([0.08, 0.15, 0.05, 0.05])
+        ax_setredraw_N = self.fig.add_axes([0.095, 0.15, 0.06, 0.05])
         self.textbox_setredraw = TextBox(ax_setredraw_N,'$N_{{Redraw}}=$  ',color='mistyrose',
                     hovercolor='lightcoral', initial=10)
         self._Nredraw = 10
         self.textbox_setredraw.on_submit(self._set_redraw_N)
 
         # Redraw current view
-        ax_redrawbutton = self.fig.add_axes([0.03, 0.225, 0.1, 0.075])
+        ax_redrawbutton = self.fig.add_axes([0.035, 0.225, 0.12, 0.075])
         self.button_redraw = Button(ax_redrawbutton,'Redraw current\nview',
                     color='mistyrose',hovercolor='lightcoral')
         self.button_redraw.on_clicked(self._redrawcurrent)
@@ -430,7 +496,6 @@ class Tomography:
         # Show lowest energy to start
         self.show(0)
         plt.show()
-        
     def __call__(self,event):
         """Interaction function to switch energy level by up/down keys
         Parameters
@@ -475,6 +540,7 @@ class Tomography:
             self.line_orb.set_ydata(self._ol[idx][self.artistid][1])
             self.ax_orb.relim()
             self.ax_orb.autoscale()
+        self.Eline.set_ydata(self._El[idx])
         self.fig.canvas.draw()
     def _onpick(self,event):
         """Interaction function to show an orbit by picking a surface of section
@@ -530,9 +596,11 @@ class Tomography:
         xl_fig = self.ax_sec.get_xlim()
         vxl = self.ax_sec.get_ylim()
         xl = (max(xl_fig[0],xl_phys[0]),min(xl_fig[1],xl_phys[1]))
-        print(xl)
         xdot0 = (vxl[0] + vxl[1])/2.
-        stmp,otmp,z = self.mapper.section(self._El[self.idx],N_orbits=self._Nredraw,N_points=len(self._sl[0][0][0]),nb_pts_orbit=None,xlim=xl,xdot0=xdot0)
+        print("Redrawing {:n} orbits...".format(self._Nredraw))
+        stmp,otmp,z = self.mapper.section(self._El[self.idx],
+                    N_orbits=self._Nredraw,N_points=len(self._sl[0][0][0]),
+                    nb_pts_orbit=None,xlim=xl,xdot=xdot0,print_progress=True)
         x = stmp[:,0,:].flatten()
         y = stmp[:,1,:].flatten()
         self._redraw(x,y)
@@ -550,7 +618,7 @@ class Tomography:
         x1, y1 = eclick.xdata, eclick.ydata
         x2, y2 = erelease.xdata, erelease.ydata
         xdot0 = (y1+y2)/2.
-        stmp,otmp,z = self.mapper.section(self._El[self.idx],N_orbits=self._Nredraw,N_points=len(self._sl[0][0][0]),nb_pts_orbit=None,xlim=(x1,x2),xdot0=xdot0)
+        stmp,otmp,z = self.mapper.section(self._El[self.idx],N_orbits=self._Nredraw,N_points=len(self._sl[0][0][0]),nb_pts_orbit=None,xlim=(x1,x2),xdot=xdot0)
         x = stmp[:,0,:].flatten()
         y = stmp[:,1,:].flatten()
         self._redraw(x,y)

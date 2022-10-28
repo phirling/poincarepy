@@ -98,7 +98,7 @@ class PlummerPotential(Potential):
         ff = -G_grav*self.M/((y[0]**2 + y[1]**2 + self.a2)**1.5)
         return np.array([y[0]*ff,y[1]*ff])
     def info(self):
-        return("Plummer potential: a = {:.1f}, M = {:.1e}$".format(self.a,self.M))
+        return("Plummer potential: a = {:.1f}, M = {:.1e}$".format(np.sqrt(self.a2),self.M))
 class zRotation(Potential):
     """
     Coriolis: -2*Omega x V

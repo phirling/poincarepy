@@ -36,10 +36,11 @@ if __name__ == "__main__":
         logpot = LogarithmicPotential(zeropos=r0)
         rotpot = zRotation(0.3,zeropos=r0)
         plumpot = PlummerPotential(zeropos=r0)
-        pot = CombinedPotential(logpot,rotpot)
+        #pot = CombinedPotential(logpot,rotpot)
         #pot = CombinedPotential(plumpot,rotpot)
         #pot = CombinedPotential(plumpot,logpot,rotpot)
         # ...
+        pot = plumpot
 
         # Mapper with default parameters for integration time etc
         mapper = PoincareMapper(pot,max_integ_time=args.tmax)
@@ -47,7 +48,7 @@ if __name__ == "__main__":
         # Print some info
         print("Generating {:n} Poincare maps in the potential:\n".format(args.N_E))
         print(pot.info())
-        print("from E={:.2f} to E={:.2f}, with {:n} orbits per map and {:n} points (crossings) per map.".format(args.Emin,args.Emax,args.N_orbits,args.N_points))
+        print("from E={:.2f} to E={:.2f}, with {:n} orbits per map and {:n} points (crossings) per orbit.".format(args.Emin,args.Emax,args.N_orbits,args.N_points))
         print("Maximum integration time is t_max={:.2f}".format(args.tmax),end="")
         if args.save is not None:
             print(", output will be saved to " + args.save + ".")
@@ -55,19 +56,11 @@ if __name__ == "__main__":
             print(", output will not be saved.")
         
         # Create Poincare sections over a range of energies
-        energylist = np.linspace(args.Emin,args.Emax,args.N_E)
-        orbitslist = []
-        sectionslist = np.empty((args.N_E,args.N_orbits,2,args.N_points))
-        zvclist = np.empty((args.N_E,2,800))
-        for j,e in enumerate(energylist):
-            print("Map #{:n} at E = {:.2f}".format(j,e))
-            s,o,zvc = mapper.section(e,args.N_orbits,args.N_points)
-            orbitslist.append(o)
-            sectionslist[j] = s
-            zvclist[j] = zvc
+        energies = np.linspace(args.Emin,args.Emax,args.N_E)
+        sections, orbits, zvcs = mapper.section_collection(energies,args.N_orbits,args.N_points)
         
         # Create PoincareCollection object for convenient pickling
-        col = PoincareCollection(energylist,orbitslist,sectionslist,zvclist,mapper)
+        col = PoincareCollection(energies,orbits,sections,zvcs,mapper)
 
         if args.save is not None:
             with open(args.save,'wb') as f:
@@ -79,10 +72,10 @@ if __name__ == "__main__":
             col = pkl.load(f)
     
         mapper = col.mapper
-        orbitslist = col.orbitslist
-        sectionslist = col.sectionsarray
-        energylist = col.energylist
-        zvclist = col.zvc_list
+        orbits = col.orbitslist
+        sections = col.sectionsarray
+        energies = col.energylist
+        zvcs = col.zvc_list
     
     """ Show Results"""
-    tom = Tomography(sectionslist,orbitslist,zvclist,energylist,mapper)
+    tom = Tomography(sections,orbits,zvcs,energies,mapper,title="Rotating Logarithmic Potential")
