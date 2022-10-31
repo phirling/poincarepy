@@ -302,6 +302,7 @@ class PoincareMapper:
             return None
         else:
             return 0.99999*root
+        
     def zvc(self,E,x):
         """Helper function to calculate zero velocity curve
         """

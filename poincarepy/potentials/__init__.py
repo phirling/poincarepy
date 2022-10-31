@@ -149,6 +149,29 @@ class CombinedPotential(Potential):
             s += "\n"
         return s1 + s
 
+class EffectiveLogarithmic_cylindrical(Potential):
+    def __init__(self,v0=10.,rc=1.,q=0.8,Lz=1.,zeropos = None):
+        self.type = 'log'
+        self.v0 = v0
+        self.rc = rc
+        self.q = q
+        self.Lz = Lz
+        # Fix gauge
+        if zeropos is None:
+            self.gaugeparam = 0.0
+        else:
+            self.gaugeparam = - 0.5*self.v0**2 * np.log(
+                self.rc**2 + zeropos[0]**2 + zeropos[1]**2/self.q**2) - Lz**2/(2*zeropos[0]**2)
+    def phi(self,y):
+        return (0.5*self.v0**2 * np.log(self.rc**2 + y[0]**2 + y[1]**2/self.q**2) + self.gaugeparam
+                + self.Lz**2/(2*y[0]**2))
+    def accel(self,y):
+        ar = - self.v0**2 / (self.rc**2 + y[0]**2 + y[1]**2/self.q**2)*y[0] - self.Lz/y[0]**3
+        az = - self.v0**2 / (self.rc**2 + y[0]**2 + y[1]**2/self.q**2)*y[1]/self.q**2
+        return np.array([ar,az])
+    def info(self):
+        return("Effective Logarithmic potential (r,z): v0 = {:.1f}, rc = {:.1f}, q  = {:.1f}, Lz = {:.1f}".format(self.v0,self.rc,self.q,self.Lz))
+
 """### WIP ###"""
 class PointMassPotential(Potential):
     def __init__(self,M=1e3,zeropos=None):
