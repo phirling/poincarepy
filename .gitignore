@@ -4,13 +4,14 @@ __pycache__/
 *$py.class
 
 # Ignore old files
-old/
-misc/
+notebooks/
+pickles/
 # C extensions
 *.so
 
 # Ignore pickle files
 *.pkl
+.DS_STORE
 
 # Ignore notebooks
 *.ipynb
