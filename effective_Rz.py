@@ -15,8 +15,8 @@ if __name__ == "__main__":
     parser.add_argument("-N_orbits",type=int,default=15,help="Number of orbits to sample if --fill is passed")
 
     # Tomography Parameters
-    parser.add_argument("-Emin",type=float,default=30.)
-    parser.add_argument("-Emax",type=float,default=240.)
+    parser.add_argument("-Emin",type=float,default=-1)
+    parser.add_argument("-Emax",type=float,default=0.)
     parser.add_argument("-N_E",type=int,default=20,help="Number of energy slices in tomographic mode")
     parser.add_argument("--no_orbit_redraw",action='store_false')
 
@@ -32,14 +32,8 @@ if __name__ == "__main__":
     if args.open is None:
 
         # Define a potential
-        logpot = potentials.LogarithmicPotential()
-        rotpot = potentials.zRotation(0.3)
-        plumpot = potentials.PlummerPotential()
-        pot = potentials.CombinedPotential(logpot,rotpot)
-        #pot = potentials.CombinedPotential(plumpot,rotpot)
-        #pot = potentials.CombinedPotential(plumpot,logpot,rotpot)
-        # ...
-        #pot = plumpot
+        pot = potentials.EffectiveLogarithmic_cylindrical(rc=0.,q=0.9,Lz=0.2,v0=1)
+        xlim = [0.001,2] # Range of R's in which to search for true physical min/max R per energy
 
         # Mapper with default parameters for integration time etc
         mapper = PoincareMapper(pot,max_integ_time=args.tmax)
@@ -56,7 +50,6 @@ if __name__ == "__main__":
         
         # Create Poincare sections over a range of energies
         energies = np.linspace(args.Emin,args.Emax,args.N_E)
-        xlim = [-20,20]
         sections, orbits, zvcs = mapper.section_collection(energies,xlim,args.N_orbits,args.N_points)
         
         # Create PoincareCollection object for convenient pickling
@@ -79,4 +72,5 @@ if __name__ == "__main__":
     
     """ Show Results"""
     polar_axlabels = ["$r$","$\dot{r}$","$r$","$z$"]
-    tom = Tomography(sections,orbits,zvcs,energies,mapper,title="Rotating Logarithmic Potential",axlabels=polar_axlabels)
+    title = r'$\Phi(r,z) = \frac{1}{2} v_0^2 \ln{\left(r_c^2 + r^2 + \frac{z^2}{q^2}\right)} + \frac{L_z^2}{2r^2}$'
+    tom = Tomography(sections,orbits,zvcs,energies,mapper,title=title,axlabels=polar_axlabels)

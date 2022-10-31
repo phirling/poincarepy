@@ -173,7 +173,7 @@ class PoincareMapper:
             y0 = [q[0],0.,q[1],np.sqrt(ED)]
             res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1,t_eval=t_eval)
             return res['y_events'][0][1:,[0,2]].T, res['y'][0:2] # Exclude first event
-    def section(self,E,N_orbits=10,N_points=10,xlim=None,xdot=0.,x0=(-1,1),nb_pts_orbit = 10000,print_progress=False):
+    def section(self,E,xlim,N_orbits,N_points,xdot=0.,auto_lim=True,nb_pts_orbit = 10000,Nsteps_lim=20,print_progress=False):
         """Calculate a surface of section at given energy
 
         A surface of section is a collection of N_orbits orbits that fill a given region of
@@ -186,20 +186,23 @@ class PoincareMapper:
         ----------
         E : float
             Energy of the section
+        xlim: array-like or tuple
+            If auto_lim is True, lower and upper bounds used for the automatic xlim search. If
+            auto_lim is False, these are used as-is to compute the section.
         N_orbits: int
             Number of orbits in the surface of section
         N_points: int
             Number of points per orbit in the map (e.g number of crossings of the section plane)
-        xlim: tuple of floats
-            x-limits of the initial conditions. If none are provided, the maximum physically allowed
-            values are computed from E=phi
         xdot: float
             Constant scalar value for the xdot (y) initial condition
-        x0: tuple of floats
-            Initial guess for the automatic xlim computation
+        auto_lim: bool
+            Whether or not to automatically determine xlims of the section
         nb_pts_orbit: int
             (Maximum) number of points for the orbit output. If None, the values at each time step
             of the integrator will be used (faster)
+        Nsteps_lim: int
+            Number of subdivisions of the interval to use when auto-searching. Use higher value
+            for larger intervals.
         Returns
         -------
         secs : array (N_orbits,2,N_points)
@@ -213,12 +216,18 @@ class PoincareMapper:
             Zero-velocity curve (limit of the section). Consists of (x,xdot) pairs that contour the
             surface of section once.
         """
-        if xlim is None:
-            xl = self.xlim(E,xdot,x0)
+        if auto_lim:
+            xl = self.xlim(E,xdot,xlim[0],xlim[1],Nsteps_lim)
+            # Add tolerance margin TODO: fix
+            if xl[0] < 0: xl[0]*=0.999
+            else: xl[0]*=1.001
+            if xl[1] > 0: xl[1]*=0.999
+            else: xl[1]*=1.001
         else:
             xl = np.asarray(xlim)
         if not self._is_allowed([xl,0,xdot,0],E):
             raise ValueError("The provided xlim/xdot lie outside the allowed ZVC")
+
         xx = np.linspace(xl[0],xl[1],N_orbits)
         xxx = np.linspace(xl[0],xl[1],400) # TODO: find a way with less points
         vx = self.zvc(E,xxx)
@@ -234,7 +243,8 @@ class PoincareMapper:
             secs[j] = s
             orbs.append(o)
         return secs, orbs, zvc
-    def section_collection(self,E,N_orbits=10,N_points=10,xlim=None,xdot=0.,x0=(-1,1),nb_pts_orbit = 10000):
+    def section_collection(self,E,xlim,N_orbits,N_points,xdot=0.,nb_pts_orbit = 10000,
+                            auto_lim = True,Nsteps_lim = 100):
         """Calculate a set of sections at different energies
 
         ##
@@ -277,31 +287,48 @@ class PoincareMapper:
         zvcs = np.empty((N_E,2,800))
         for j,e in enumerate(tqdm(E)):
             #print("Map #{:n} at E = {:.2f}".format(j+1,e))
-            s,o,zvc = self.section(e,N_orbits,N_points,xlim,xdot,x0,nb_pts_orbit)
+            s,o,zvc = self.section(e,xlim,N_orbits,N_points,xdot,auto_lim,nb_pts_orbit,Nsteps_lim)
             orbits.append(o)
             sections[j] = s
             zvcs[j] = zvc
         return sections,orbits,zvcs
 
-    def xlim(self,E,xdot,x0=(-1,1)):
+    def xlim(self,E,xdot,a,b,Nsteps=30):
         """Helper function to calculate physical x-limits at given energy
 
-        Use the condition E=phi with y=0, xdot=0 to compute the maximum
-        allowed values for x.
+        Use the condition E=phi with y=0, ydot=0 to compute the maximum
+        allowed values for x at given xdot.
+
+        Parameters
+        ----------
+        E: float
+            Energy of the map
+        xdot: float
+            Conjugate variable to x
+        a: float
+            Lower bound for the search
+        b: float
+            Upper bound for the search
+        Nsteps: int
+            Number of subdivisions of [a,b] to use to find the roots. Default is 30
+            (Use larger value if a large interval is provided)
         """
-        def sp(x):
-            A = np.zeros((4,x.shape[0]))
-            A[0] = x
-            A[2] = xdot
-            return A
-        g = lambda x: E-self.pot.phi(sp(x)[0:2])
-        gprime = lambda x: self.pot.accel(sp(x))[0]
-        root,conv,i = scpopt.newton(g,x0,gprime,full_output=True,maxiter=2000)
-        if not conv.any():
-            print("The root finding algorithm did not converge to find appropriate lims on axis {:n}".format(i))
-            return None
+        xs = np.linspace(a,b,Nsteps)
+        phidiff = self.pot.phi([xs,np.zeros_like(xs)]) - E - 0.5*xdot**2
+        f = lambda x: self.pot.phi([x,np.zeros_like(x)]) - E - 0.5*xdot**2
+        zeros = []
+        for i in range(Nsteps-1):
+            if phidiff[i]*phidiff[i+1] > 0:
+                continue
+            else:
+                root = scpopt.brentq(f,xs[i],xs[i+1])
+                zeros.append(root)
+            if len(zeros) == 2:
+                break
+        if len(zeros) == 0:
+            raise RuntimeError("No roots found! Use larger Nsteps")
         else:
-            return 0.99999*root
+            return np.asarray(zeros)
         
     def zvc(self,E,x):
         """Helper function to calculate zero velocity curve
@@ -361,8 +388,6 @@ class PoincareCollection:
         self.mapper = mapper
         self.nb_energies = len(E_list)
         self.nb_orbits_per_E = len(orbits_list[0])
-    def get_potential(self):
-        return self.potential
 
 
 class Tomography:
@@ -412,6 +437,16 @@ class Tomography:
         self._nEn = len(sections)
         self._nSec = len(sections[0])
 
+        # Precompute figure limits per energy
+        x0, x1 = np.amin(zvcs[:,0],axis=1),np.amax(zvcs[:,0],axis=1)
+        y0, y1 = np.amin(zvcs[:,1],axis=1),np.amax(zvcs[:,1],axis=1)
+        self.axlims = np.array([
+            x0 - 0.05*(x1-x0),
+            x1 + 0.05*(x1-x0),
+            y0 - 0.05*(y1-y0),
+            y1 + 0.05*(y1-y0)
+        ])
+
         """ Construct figure """
         # Main fig & axes
         self.fig = plt.figure(figsize=figsize)
@@ -439,8 +474,7 @@ class Tomography:
         self.line_zvc = self.ax_sec.plot([], [],lw=0.5,color='indianred')[0]
 
         # Potential
-        xm,xp = zvcs[-1,0,0],zvcs[-1,0,399]
-        xpot = np.linspace(1.05*xm,1.05*xp,100)
+        xpot = np.linspace(self.axlims[0,-1],self.axlims[1,-1],100)
         phi = self.mapper.pot.phi([xpot,0])
         self.ax_pot.plot(xpot,phi,color='black')
         self.Eline = self.ax_pot.axhline(self._El[0],color='indianred')
@@ -537,8 +571,10 @@ class Tomography:
         self.line_zvc.set_ydata(self._zvcl[idx,1])
         # Set ax limits to 1.05*zero velocity curve
         mgn = 1.05
-        self.ax_sec.set_xlim(mgn*self._zvcl[idx,0,0],mgn*self._zvcl[idx,0,399])
-        self.ax_sec.set_ylim(mgn*self._zvcl[idx,1,599],mgn*self._zvcl[idx,1,199])
+        #self.ax_sec.set_xlim(mgn*self._zvcl[idx,0,0],mgn*self._zvcl[idx,0,399])
+        #self.ax_sec.set_ylim(mgn*self._zvcl[idx,1,599],mgn*self._zvcl[idx,1,199])
+        self.ax_sec.set_xlim(self.axlims[0,idx],self.axlims[1,idx])
+        self.ax_sec.set_ylim(self.axlims[2,idx],self.axlims[3,idx])
         if not self._firstpick and self.redraw_orbit:
             self.line_orb.set_xdata(self._ol[idx][self.artistid][0])
             self.line_orb.set_ydata(self._ol[idx][self.artistid][1])
@@ -604,7 +640,8 @@ class Tomography:
         print("Redrawing {:n} orbits...".format(self._Nredraw))
         stmp,otmp,z = self.mapper.section(self._El[self.idx],
                     N_orbits=self._Nredraw,N_points=len(self._sl[0][0][0]),
-                    nb_pts_orbit=None,xlim=xl,xdot=xdot0,print_progress=True)
+                    nb_pts_orbit=None,xlim=xl,xdot=xdot0,
+                    print_progress=True,auto_lim=False)
         x = stmp[:,0,:].flatten()
         y = stmp[:,1,:].flatten()
         self._redraw(x,y)
@@ -622,7 +659,7 @@ class Tomography:
         x1, y1 = eclick.xdata, eclick.ydata
         x2, y2 = erelease.xdata, erelease.ydata
         xdot0 = (y1+y2)/2.
-        stmp,otmp,z = self.mapper.section(self._El[self.idx],N_orbits=self._Nredraw,N_points=len(self._sl[0][0][0]),nb_pts_orbit=None,xlim=(x1,x2),xdot=xdot0)
+        stmp,otmp,z = self.mapper.section(self._El[self.idx],xlim=(x1,x2),N_orbits=self._Nredraw,N_points=len(self._sl[0][0][0]),nb_pts_orbit=None,auto_lim=False,xdot=xdot0)
         x = stmp[:,0,:].flatten()
         y = stmp[:,1,:].flatten()
         self._redraw(x,y)
