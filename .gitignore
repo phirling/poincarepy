@@ -16,6 +16,7 @@ pickles/
 # Ignore notebooks
 *.ipynb
 
+oldsetup.py
 # Ignore vscode settings
 .vscode/
 
