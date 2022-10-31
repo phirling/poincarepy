@@ -474,10 +474,11 @@ class Tomography:
         self.line_zvc = self.ax_sec.plot([], [],lw=0.5,color='indianred')[0]
 
         # Potential
-        xpot = np.linspace(self.axlims[0,-1],self.axlims[1,-1],100)
+        xpot = np.linspace(x0,x1,100)
         phi = self.mapper.pot.phi([xpot,0])
         self.ax_pot.plot(xpot,phi,color='black')
         self.Eline = self.ax_pot.axhline(self._El[0],color='indianred')
+        self.Etext = self.ax_pot.text(0.75, 0.9,'',color='indianred',transform=plt.gca().transAxes)
 
         # Quit button
         ax_quitbutton = self.fig.add_axes([0.035, 0.05, 0.12, 0.075])
@@ -581,6 +582,7 @@ class Tomography:
             self.ax_orb.relim()
             self.ax_orb.autoscale()
         self.Eline.set_ydata(self._El[idx])
+        self.Etext.set_text('{:.2f}'.format(self._El[idx]))
         self.fig.canvas.draw()
     def _onpick(self,event):
         """Interaction function to show an orbit by picking a surface of section

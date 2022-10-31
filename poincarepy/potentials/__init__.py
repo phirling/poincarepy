@@ -1,4 +1,5 @@
 import numpy as np
+import matplotlib.pyplot as plt
 
 #G_grav = 4.299581e04 # kpc * (km/s)^2 / 10^10 M_sun
 G_grav = 1
@@ -35,7 +36,21 @@ class Potential:
     def info(self):
         s = "Empty Potential"
         return(s)
-
+    def plot_x(self,x0,x1,y=0,Npoints=100,ax=None):
+        xrange = np.linspace(x0,x1,Npoints)
+        if ax is None:
+            return plt.plot(xrange,self.phi([xrange,np.zeros_like(xrange)]))
+        else:
+            return ax.plot(xrange,self.phi([xrange,np.zeros_like(xrange)]))
+    def plotcontour(self,x0,x1,y0,y1,Npoints=100,levels=20,cmap='viridis',ax=None):
+        xrange = np.linspace(x0,x1,Npoints)
+        yrange = np.linspace(y0,y1,Npoints)
+        X,Y = np.meshgrid(xrange,yrange)
+        Z = self.phi([X,Y])
+        if ax is None:
+            return plt.contourf(X,Y,Z,levels=levels,cmap=cmap)
+        else:
+            return ax.contourf(X,Y,Z)
 ####### Concrete Potentials #######
 
 class LogarithmicPotential(Potential):

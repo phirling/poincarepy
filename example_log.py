@@ -34,16 +34,11 @@ if __name__ == "__main__":
         # Define a potential
         logpot = potentials.LogarithmicPotential()
         rotpot = potentials.zRotation(0.3)
-        plumpot = potentials.PlummerPotential()
         pot = potentials.CombinedPotential(logpot,rotpot)
-        #pot = potentials.CombinedPotential(plumpot,rotpot)
-        #pot = potentials.CombinedPotential(plumpot,logpot,rotpot)
-        # ...
-        #pot = plumpot
-
         # Mapper with default parameters for integration time etc
         mapper = PoincareMapper(pot,max_integ_time=args.tmax)
 
+        
         # Print some info
         print("Generating {:n} Poincare maps in the potential:\n".format(args.N_E))
         print(pot.info())
@@ -72,11 +67,11 @@ if __name__ == "__main__":
             col = pkl.load(f)
     
         mapper = col.mapper
+        pot = mapper.pot
         orbits = col.orbitslist
         sections = col.sectionsarray
         energies = col.energylist
         zvcs = col.zvc_list
     
     """ Show Results"""
-    polar_axlabels = ["$r$","$\dot{r}$","$r$","$z$"]
-    tom = Tomography(sections,orbits,zvcs,energies,mapper,title="Rotating Logarithmic Potential",axlabels=polar_axlabels)
+    tom = Tomography(sections,orbits,zvcs,energies,mapper,title="Rotating Logarithmic Potential")
