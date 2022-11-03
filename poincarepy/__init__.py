@@ -14,12 +14,47 @@ def event_yplanecross(t,y):
 event_yplanecross.direction = 1
 
 class PoincareMapper:
+    """Class that handles computations (orbit integration, map generation,..) based on a physical potential
+    
+    This is the base class that, provided with a Potential object, performs dynamics computation in
+    this potential. These include: orbit integration, mapping, generation of Poincaré maps as well
+    as collections of those at multiple energies, and periodic orbit searching.
+    
+    In the following, y is understood as a 4-vector containing the 4 dof of the system. By default, the map
+    is drawn in the y[1] = 0 section of the phase space, and the y[3] variable is eliminated by the Hamiltonian
+    integral. Thus, the map space is M = {y[0], y[2]}. In a cartesian frame, we would have y = [x,y,vx,vy] and
+    M = {x,vx} with y=0 and vy calculated via H. In a meridonal plane frame, we would have y = [r,z,vr,vz] and
+    M = {r,vr}, with z=0 and vz calculated via H.
+
+    Other coordinate frames are not yet implemented and may lead to inconsistencies (if for example the kinetic
+    energy is not in a cartesian form K = 0.5(y[2]^2 + y[3]^2)).
+
+    Parameters
+    ----------
+    pot: Potential
+        The physical potential that describes the dynamical system
+    crossing_function: callable
+        Condition function used to compute Poincaré maps, has the signature f(t,y) = 0 when
+        a point is to be drawn. One sets the crossing direction by defining an attribute on the
+        function object as f.direction = +1, -1, where +/- indicate the direction of crossing.
+    max_integ_time: float
+        The maximum allowed integration time (in physical/internal units). If a computation exceeds
+        this limit, an error is raised. In general, the effective integration time in most computations
+        will be determined by a condition (e.g. number of crossing events) rather than a total time,
+        so this value only serves as an upper limit.
+    dx: float
+        Finite difference step used for the first dynamical variable (x,r,.) in the jacobian computation
+    dvx: float
+        Finite difference step used for the second dynamical variable (vx,vr,.) in the jacobian computation
+
+    Attributes
+    ----------
+    Same as parameters
+    """
     def __init__(self,pot: pot.Potential,crossing_function = event_yplanecross,
                  max_integ_time=200,dx=1e-8,dvx=1e-8) -> None:
         self.pot = pot
         self.maxtime = max_integ_time
-        #self._evt = lambda t,y: crossing_function(t,y)
-        #self._createevent(crossing_function)
         self._evt = copy.deepcopy(crossing_function)
         self._dx = dx
         self._dvx = dvx
@@ -344,7 +379,9 @@ class PoincareMapper:
 class PoincareCollection:
     """Container class for a collection of surfaces of section and related data, used for pickling
 
-    ##
+    This class is essentially a dictionnary of the elements making up a Poincaré Map collection, that
+    are required by the Tomography class. It is used only for convenience when saving (pickling)
+    calculated data for reuse.
 
     Parameters
     ----------
@@ -393,7 +430,22 @@ class PoincareCollection:
 class Tomography:
     """Tomographic visualisation of an ensemble of surfaces of section at different energies
 
-    ##
+    Main visualization class. Using precalculated data (Poincaré sections at different energies), allows
+    the user to pan through the energy dimension in a tomography-like fashion and see how the phase space
+    of the system (represented with a Poincaré section) changes in this dimension. One can click on a given
+    orbit in the reduced phase space to see how it looks like in configuration space.
+
+    In addition, if the user wishes to analyze some part of the phase space in more detail, he or she can
+    redraw orbits in real time, using one of 3 functions:
+    - Single orbit redrawing: This mode is toggled using the "z" key and, by clicking on a point in the reduced
+    phase space, a new orbit is calculated using the initial conditions derived from the clicked point.
+    - Rectangular selection redrawing: This mode is toggled using the "t" key and allows the user to select a
+    rectangular region in which a desired N number of orbits, with ICs lying uniformly on the middle horizontal
+    of the rectangle, are redrawn.
+    - Full view redraw: Is toggled with a button and simply redraws the section at the current energy level with
+    N orbits, where N can be set in a text box.
+
+    The class methods are essentially all internal and are thus not described in detail in the API.
 
     Parameters
     ----------
@@ -681,9 +733,10 @@ class Tomography:
                 self.fig.canvas.mpl_disconnect(self._singleredrawid)
                 self._exit_redraw()
     def _singleredraw(self,event):
-        q0 = [event.xdata,event.ydata]
-        s,o = self.mapper.integrate_orbit(q0,self._El[self.idx],len(self._sl[0][0][0]))
-        self._redraw(s[0],s[1],o,hide_other=False,s=5,c='rebeccapurple')
+        if event.inaxes == self.ax_sec:
+            q0 = [event.xdata,event.ydata]
+            s,o = self.mapper.integrate_orbit(q0,self._El[self.idx],len(self._sl[0][0][0]))
+            self._redraw(s[0],s[1],o,hide_other=False,s=5,c='rebeccapurple')
 
     # Periodic Orbit search
     def _set_search_period(self,p):

@@ -37,7 +37,6 @@ class Potential:
         s = "Empty Potential"
         return(s)
     def plot_x(self,x0,x1,y=0,Npoints=100,ax=None):
-        print("Test")
         xrange = np.linspace(x0,x1,Npoints)
         if ax is None:
             return plt.plot(xrange,self.phi([xrange,np.zeros_like(xrange)]))
