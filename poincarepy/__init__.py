@@ -31,9 +31,9 @@ class PoincareMapper:
 
     Parameters
     ----------
-    pot: Potential
+    pot : Potential
         The physical potential that describes the dynamical system
-    crossing_function: callable
+    crossing_function : callable
         Condition function used to compute Poincaré maps, has the signature f(t,y) = 0 when
         a point is to be drawn. One sets the crossing direction by defining an attribute on the
         function object as f.direction = +1, -1, where +/- indicate the direction of crossing.
@@ -282,8 +282,6 @@ class PoincareMapper:
                             auto_lim = True,Nsteps_lim = 100):
         """Calculate a set of sections at different energies
 
-        ##
-
         Parameters
         ----------
         E : array
@@ -467,11 +465,9 @@ class Tomography:
         Size of the figure in inches
     redraw_orbit: bool, optional
         Whether to redraw a selected orbit when switching to a different energy. Default is true
-
-    Attributes
-    ----------
-    ##
+    """
     
+    """
     Figure layout:
     Horizontal: <0.03> margin <0.1> buttons <0.05> margin <0.36> axes <0.07> margin <0.36> axes <0.03> margin
     Vertical: <0.08> margin <*> axes
@@ -499,7 +495,7 @@ class Tomography:
             y1 + 0.05*(y1-y0)
         ])
 
-        """ Construct figure """
+        ## Construct figure
         # Main fig & axes
         self.fig = plt.figure(figsize=figsize)
         aspct = figsize[0] / figsize[1]
