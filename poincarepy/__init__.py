@@ -169,7 +169,7 @@ class PoincareMapper:
             print("Converged to a periodic orbit after {:n} iterations:".format(ii))
             print("[x,vx] = [{:.3e},{:.3e}]".format(qn[0],qn[1]))
         return qn
-    def integrate_orbit(self,q,E,N=1,N_pts_orbit = 10000):
+    def integrate_orbit(self,q,E,N=1,N_pts_orbit = 1000,dense=True):
         """Integrate an orbit with given starting point
 
         Same principle as map() but the whole history of crossings, as well as the
@@ -198,17 +198,32 @@ class PoincareMapper:
             Configuration space orbit, length depending on integration time required
             to reach N crossings
         """
-        if N_pts_orbit is not None:
-            t_eval = np.linspace(0,self.maxtime,10000)
+        # This is a depcrecated mode, kept only for documentation but will be deleted
+        if not dense:
+            if N_pts_orbit is not None:
+                t_eval = np.linspace(0,self.maxtime,10000)
+            else:
+                t_eval = None
+            ED = 2*(E-self.pot.phi([q[0],0.])) - q[1]**2
+            if ED < 0:
+                raise ValueError("Starting point out of range")
+            else:
+                y0 = [q[0],0.,q[1],np.sqrt(ED)]
+                res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1,t_eval=t_eval)
+                return res['y_events'][0][1:,[0,2]].T, res['y'][0:2] # Exclude first event
         else:
-            t_eval = None
-        ED = 2*(E-self.pot.phi([q[0],0.])) - q[1]**2
-        if ED < 0:
-            raise ValueError("Starting point out of range")
-        else:
-            y0 = [q[0],0.,q[1],np.sqrt(ED)]
-            res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1,t_eval=t_eval)
-            return res['y_events'][0][1:,[0,2]].T, res['y'][0:2] # Exclude first event
+            ED = 2*(E-self.pot.phi([q[0],0.])) - q[1]**2
+            if ED < 0:
+                raise ValueError("Starting point out of range")
+            else:
+                y0 = [q[0],0.,q[1],np.sqrt(ED)]
+                res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1,dense_output=True)
+                sol = res['sol']
+                ts = np.linspace(0,res['t'][-1],N_pts_orbit)
+                orb = sol(ts)
+                return res['y_events'][0][1:,[0,2]].T, orb[0:2] # Exclude first event
+
+
     def section(self,E,xlim,N_orbits,N_points,xdot=0.,auto_lim=True,nb_pts_orbit = 10000,Nsteps_lim=20,print_progress=False):
         """Calculate a surface of section at given energy
 
@@ -281,7 +296,7 @@ class PoincareMapper:
             orbs.append(o)
         return secs, orbs, zvc
     def section_collection(self,E,xlim,N_orbits,N_points,xdot=0.,nb_pts_orbit = 10000,
-                            auto_lim = True,Nsteps_lim = 100):
+                            auto_lim = True,Nsteps_lim = 200):
         """Calculate a set of sections at different energies
 
         Parameters

@@ -48,6 +48,8 @@ class Potential:
             return plt.contourf(X,Y,Z,levels=levels,cmap=cmap)
         else:
             return ax.contourf(X,Y,Z)
+
+
 ####### Concrete Potentials #######
 
 class LogarithmicPotential(Potential):
@@ -64,7 +66,7 @@ class LogarithmicPotential(Potential):
         ay = A*y[1]/(self.q**2)
         return np.array([ax,ay])
     def info(self):
-        return("Logarithmic potential: v0 = {:.1f}, rc = {:.1f}, q  = {:.1f}".format(self.v0,self.rc,self.q))
+        return("Logarithmic potential: v0 = {:.1f}, rc = {:.1f}, q  = {:.2f}".format(self.v0,self.rc,self.q))
 
 class HomospherePotential(Potential):
     """Potential of a homogeneous sphere

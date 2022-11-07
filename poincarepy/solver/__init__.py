@@ -1,6 +1,6 @@
 import numpy as np
 from scipy.integrate._ivp.rk import DOP853
-from scipy.integrate._ivp.ivp import prepare_events, handle_events, find_active_events, OdeResult
+from scipy.integrate._ivp.ivp import prepare_events, handle_events, find_active_events, OdeResult, OdeSolution
 
 '''
 Copyright (c) 2001-2002 Enthought, Inc. 2003-2022, SciPy Developers.
@@ -51,18 +51,23 @@ TODO: either rewrite to make it explicit that only 1 event is watched OR impleme
 '''
 
 # The following function is a remade version of solve_ivp, which reuses some parts of the original
-def integrate_orbit(fun, t_span, y0, t_eval=None, events=None,event_count_end = None, **options):
+def integrate_orbit(fun, t_span, y0, t_eval=None, events=None,event_count_end = None,dense_output=False, **options):
     t0, tf = map(float,t_span)
     solver = DOP853(fun,t0,y0,tf,**options)
 
     if t_eval is None:
         ts = [t0]
         ys = [y0]
+    elif t_eval is not None and dense_output:
+        ts = []
+        ti = [t0]
+        ys = []
     else:
         ts = []
         ys = []
 
     t_eval_i = 0
+    interpolants = []
 
     events, is_terminal, event_dir = prepare_events(events)
 
@@ -90,6 +95,13 @@ def integrate_orbit(fun, t_span, y0, t_eval=None, events=None,event_count_end = 
         y = solver.y
         sol = None
 
+
+        if dense_output:
+            sol = solver.dense_output()
+            interpolants.append(sol)
+        else:
+            sol = None
+        
         if events is not None:
             g_new = [event(t, y) for event in events]
             active_events = find_active_events(g, g_new, event_dir)
@@ -120,14 +132,26 @@ def integrate_orbit(fun, t_span, y0, t_eval=None, events=None,event_count_end = 
             ts.append(t)
             ys.append(y)
         else:
-            t_eval_i_new = np.searchsorted(t_eval, t, side='right')
-            t_eval_step = t_eval[t_eval_i:t_eval_i_new]
+            # The value in t_eval equal to t will be included.
+            if solver.direction > 0:
+                t_eval_i_new = np.searchsorted(t_eval, t, side='right')
+                t_eval_step = t_eval[t_eval_i:t_eval_i_new]
+            else:
+                t_eval_i_new = np.searchsorted(t_eval, t, side='left')
+                # It has to be done with two slice operations, because
+                # you can't slice to 0th element inclusive using backward
+                # slicing.
+                t_eval_step = t_eval[t_eval_i_new:t_eval_i][::-1]
+
             if t_eval_step.size > 0:
                 if sol is None:
                     sol = solver.dense_output()
                 ts.append(t_eval_step)
                 ys.append(sol(t_eval_step))
                 t_eval_i = t_eval_i_new
+
+        if t_eval is not None and dense_output:
+            ti.append(t)
 
     if event_count_end is not None and status == 0:
         #print("Warning: the time limit tf={:.1f} was reached before {:.0f} crossings could occur".format(tf,event_count_end))
@@ -144,4 +168,12 @@ def integrate_orbit(fun, t_span, y0, t_eval=None, events=None,event_count_end = 
         ts = np.hstack(ts)
         ys = np.hstack(ys)
 
-    return OdeResult(t=ts,y=ys,t_events = t_events, y_events = y_events,status=status)
+    if dense_output:
+        if t_eval is None:
+            sol = OdeSolution(ts, interpolants)
+        else:
+            sol = OdeSolution(ti, interpolants)
+    else:
+        sol = None
+
+    return OdeResult(t=ts,y=ys,sol=sol,t_events = t_events, y_events = y_events,status=status)
