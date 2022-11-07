@@ -3,10 +3,7 @@ import matplotlib.pyplot as plt
 
 #G_grav = 4.299581e04 # kpc * (km/s)^2 / 10^10 M_sun
 G_grav = 1
-
-"""
-In this file one can define any physical potential
-"""
+"""Gravitational constant, set to one by default. Changing this value allows to use different unit systems."""
 
 class Potential:
     """Base class of a physical potential

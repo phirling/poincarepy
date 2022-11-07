@@ -46,10 +46,6 @@ class PoincareMapper:
         Finite difference step used for the first dynamical variable (x,r,.) in the jacobian computation
     dvx: float
         Finite difference step used for the second dynamical variable (vx,vr,.) in the jacobian computation
-
-    Attributes
-    ----------
-    Same as parameters
     """
     def __init__(self,pot: pot.Potential,crossing_function = event_yplanecross,
                  max_integ_time=200,dx=1e-8,dvx=1e-8) -> None:
@@ -60,6 +56,7 @@ class PoincareMapper:
         self._dvx = dvx
     def map(self,q,E,N=1):
         """Map a point q to its Poincare map after N crossings (in 2D)
+
         Parameters
         ----------
         q : array-like size (2,)
@@ -86,6 +83,7 @@ class PoincareMapper:
             return res['y_events'][0][-1][[0,2]]
     def jac(self,q,E,N=1):
         """2D-Jacobian matrix of the map() function
+
         Parameters
         ----------
         q : array-like size (2,)
@@ -121,6 +119,7 @@ class PoincareMapper:
     def find_periodic_orbit(self,q0,E,N=1,print_result=False,print_progress=False,
                             maxiter = 100, eps = 1e-5):
         """Starting from q0 at energy E, find an N-periodic orbit
+
         Parameters
         ----------
         q0 : array-like size (2,)
@@ -137,6 +136,7 @@ class PoincareMapper:
             Maximum number of iterations for the orbit search
         eps: float
             Precision |q_n-q_n-1| < eps required to find an orbit
+
         Returns
         -------
         q* : array (2,) or None
@@ -188,6 +188,7 @@ class PoincareMapper:
             Maximum number of points in the returned config. space orbit array. Max
             because in reality integration stops when N crossings have occured, so the
             length of the output orbit array is N'<= N_pts_orbit
+
         Returns
         -------
         sec : array (2,N)
@@ -238,6 +239,7 @@ class PoincareMapper:
         Nsteps_lim: int
             Number of subdivisions of the interval to use when auto-searching. Use higher value
             for larger intervals.
+
         Returns
         -------
         secs : array (N_orbits,2,N_points)
@@ -300,6 +302,7 @@ class PoincareMapper:
         nb_pts_orbit: int
             (Maximum) number of points for the orbit output. If None, the values at each time step
             of the integrator will be used (faster)
+            
         Returns
         -------
         sections : array (N_energies,N_orbits,2,N_points)
