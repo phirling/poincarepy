@@ -28,7 +28,7 @@ Implicitely, one Poincaré Section corresponds to a specific energy, for the rea
 
 Finally, at a fixed energy *E*, there is in general only a finite region of the phase space, and thus also of :math:`S`
 accessible to an orbit because of the condition :math:`E = \phi + K > 0`, where :math:`K` is the kinetic energy. This region
-is bounded by the so-called *zero-velocity curve*, which thus gives the contour of the Poincaré section.
+is bounded by the so-called *zero-velocity curve* (ZVC), which thus gives the contour of the Poincaré section.
 
 Module Usage
 ------------
@@ -53,6 +53,22 @@ Examples
 A set of example scripts can be found in the ``examples`` directory at the root of the repository. These examples
 showcase how one can definine a potential, use the ``PoincareMapper`` class to do computations, visualize the results
 and export/import the computation results for later reuse.
+
+1. Rotating Logarithmic Potential (For Astro III)
+^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+The script ``examples/rotating_log.py`` considers the case of a logarithmic potential:
+
+:math:`\phi(x,y) = \frac{1}{2}v_0^2 \log{\left(r_c^2 + x^2 + \frac{y^2}{q^2}\right)}`
+
+which is rotating with angular velocity :math:`\omega`. As shown in the lecture, the rotation induces an
+effective potential
+
+:math:`\phi_{eff}(x,y) = \phi(x,y) - \frac{1}{2} \omega^2 (x^2 + y^2)`,
+
+as well as coriolis and centrifugal terms in the Hamilton equations.
+
+.. figure:: logpot.png
+  :width: 500
 
 Customization
 =============

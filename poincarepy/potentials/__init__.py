@@ -33,12 +33,12 @@ class Potential:
     def info(self):
         s = "Empty Potential"
         return(s)
-    def plot_x(self,x0,x1,y=0,Npoints=100,ax=None):
+    def plot_x(self,x0,x1,y=0,Npoints=100,ax=None,label=None):
         xrange = np.linspace(x0,x1,Npoints)
         if ax is None:
-            return plt.plot(xrange,self.phi([xrange,np.zeros_like(xrange)]))
+            return plt.plot(xrange,self.phi([xrange,np.zeros_like(xrange)]),label=label)
         else:
-            return ax.plot(xrange,self.phi([xrange,np.zeros_like(xrange)]))
+            return ax.plot(xrange,self.phi([xrange,np.zeros_like(xrange)]),label=label)
     def plotcontour(self,x0,x1,y0,y1,Npoints=100,levels=20,cmap='viridis',ax=None):
         xrange = np.linspace(x0,x1,Npoints)
         yrange = np.linspace(y0,y1,Npoints)
@@ -47,7 +47,7 @@ class Potential:
         if ax is None:
             return plt.contourf(X,Y,Z,levels=levels,cmap=cmap)
         else:
-            return ax.contourf(X,Y,Z)
+            return ax.contourf(X,Y,Z,levels=levels,cmap=cmap)
 
 
 ####### Concrete Potentials #######

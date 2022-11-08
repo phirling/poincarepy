@@ -1,5 +1,6 @@
 import numpy as np
 import argparse
+import matplotlib.pyplot as plt
 import pickle as pkl
 from poincarepy import PoincareCollection, Tomography, PoincareMapper
 import poincarepy.potentials as potentials
@@ -12,16 +13,15 @@ import poincarepy.potentials as potentials
 #
 # === Troubleshooting ===
 # "No roots found, use larger Nsteps": plot the potential with the parameters you use and look at
-# the typical x-scale for the energies you consider. Set xlim (below) to this scale (very broadly)
+# the typical x-scale for the energies you consider. Set xlim (see below) to this scale (very broadly)
 # Explanation: in order to automatically find the xlims of the zero-velocity curves, the algorithm
-# needs a rough estimate on where to look for them
+# needs a rough estimate on where to look for them. It subdivides the provided interval in a
+# tweakable (default 200) number of steps and applies Brent's method to find the root of E-phi
 #
-# "Tmax was reached before N crossings cound occur": Increase the parameter -tmax.
-#  Explanation: the integrator uses an upper limit in integration time to reach the desired
-#  number of map crossings
 #
-# The configuration space orbits look pointy and not really smooth: Decrease the parameter -tmax
-
+# Interesting parameter choices (like those shown during lecture)
+# -omega 1
+# -q 0.25 -Emin -150 -Emax -10
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(
@@ -32,6 +32,8 @@ if __name__ == "__main__":
     parser.add_argument("-rc",type=float,default=0.14,help="Characteristic radius of the log potential")
     parser.add_argument("-q",type=float,default=0.8,help="Flattening of the log potential")
     parser.add_argument("-omega",type=float,default=0.,help="Rotation frequency")
+    parser.add_argument("--plotpotential",action='store_true')
+    parser.add_argument("--plotcontour",action='store_true')
 
     # Poincaré Section Parameters
     parser.add_argument("-N_points",type=int,default= 40,help="Number of points in the sections")
@@ -41,7 +43,7 @@ if __name__ == "__main__":
     parser.add_argument("-N_E",type=int,default=20,help="Number of energy levels")
 
     # Integration Parameters (increase this value if you get a RuntimeError that tmax was reached)
-    parser.add_argument("-tmax",type=float,default=200,help="Maximal integration time. If --no_count, this will be the obligatory final time")
+    parser.add_argument("-tmax",type=float,default=500,help="Maximal integration time per orbit")
     
     # Import/Export Parameters
     parser.add_argument("-save",type=str,default=None)
@@ -58,12 +60,38 @@ if __name__ == "__main__":
 
     # Compute Poincaré Map (run without loading previous pkl file)
     if args.open is None:
-
         # Define the potential
         logpot = potentials.LogarithmicPotential(v0=args.v0,rc=args.rc,q=args.q)
         rotpot = potentials.zRotation(omega=args.omega)
         pot = potentials.CombinedPotential(logpot,rotpot)
 
+        # As explained in the troubleshooting paragraph above, the algorithm to automatically find
+        # the limits of the zero-velocity curve needs a rough estimate of the interval in which 
+        # to search for them. Here its set to 20 by default but depending on your choice of
+        # parameters, it may be necessary to broaden the search region.
+        xlim = [-20,20]
+        if args.plotpotential:
+            figp,axp = plt.subplots(figsize=(5,5))
+            pot.plot_x(xlim[0],xlim[1],ax=axp)
+            axp.axhline(args.Emax,ls='--',color='black',label='$E_{max}$')
+            axp.axhline(args.Emin,ls='-',color='black',label='$E_{min}$')
+            axp.set_xlabel('$x$')
+            axp.set_ylabel('$\phi(x,0)$')
+            axp.legend()
+            plt.show()
+            quit()
+        elif args.plotcontour:
+            figp,axp = plt.subplots(figsize=(5,4))
+            ctr = pot.plotcontour(xlim[0],xlim[1],xlim[0],xlim[1],ax=axp,levels=20)
+            axp.set_xlabel('$x$')
+            axp.set_ylabel('$y$')
+            figp.colorbar(ctr,label='$\phi_{eff}(x,y)$')
+            ttl = "$r_c={:.1f}, v_0={:.1f}, q={:.2f}, \omega={:.1f}$".format(args.rc,args.v0,args.q,args.omega)
+            axp.set_title(ttl)
+            plt.show()
+            figp.savefig('logpot.png',dpi=300,bbox_inches='tight',transparent=True)
+            quit()
+            
         # Mapper object to do computations (see https://poincarepy.readthedocs.io/en/latest/api.html)
         mapper = PoincareMapper(pot,max_integ_time=args.tmax)
 
@@ -79,8 +107,6 @@ if __name__ == "__main__":
         
         # Create Poincare sections over the specified range of energies
         energies = np.linspace(args.Emin,args.Emax,args.N_E)
-        xlim = [-20,20] # <- This is a very broad range in which the code
-                        # automatically searches for the true zero-velocity curve limits 
         sections, orbits, zvcs = mapper.section_collection(energies,xlim,args.N_orbits,args.N_points)
         
         # Create PoincareCollection object for convenient pickling
