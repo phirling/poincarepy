@@ -214,6 +214,30 @@ class PoincareMapper:
                 res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1,t_eval=None)
                 return res['y_events'][0][1:,[0,2]].T, res['y'][0:2] # Exclude first event
 
+    def integrate_orbit_full(self,y0,tf,N_points_orbit = 1000):
+        """Integrate an orbit with given starting point in the full phase space
+
+        Given a point y0 in the 4D phase space, integrate until tf. This method does not
+        calculate crossing points and outputs only a phase space orbit.
+
+        Parameters
+        ----------
+        y0 : 1D-array of size 4
+            The starting point (x,y,vx,vy) in phase space
+        tf : float
+            Integration time
+        N_points_orbit : int
+            Number of samples in (0,tf) at which to store the solution. The sampling times
+            are uniformly distributed in (0,tf)
+
+        Returns
+        -------
+        yt : 2D-array of size (4,N_points_orbit)
+            The trajectory (x(t),y(t),vx(t),vy(t)) in phase space
+        """
+        t_eval = np.linspace(0,tf,N_points_orbit)
+        res = solver.integrate_orbit(self.pot.RHS,(0.,tf),y0,t_eval)
+        return res['y']
 
     def section(self,E,xlim,N_orbits,N_points,xdot=0.,auto_lim=True,N_points_orbit = 10000,Nsteps_lim=20,print_progress=False):
         """Calculate a surface of section at given energy
