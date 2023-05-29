@@ -52,25 +52,17 @@ if __name__ == "__main__":
         energies = np.linspace(args.Emin,args.Emax,args.N_E)
         sections, orbits, zvcs = mapper.section_collection(energies,xlim,args.N_orbits,args.N_points)
         
-        # Create PoincareCollection object for convenient pickling
+        # Create PoincareCollection object
         col = PoincareCollection(energies,orbits,sections,zvcs,mapper)
 
         if args.save is not None:
-            with open(args.save,'wb') as f:
-                pkl.dump(col,f)
+            col.save(args.save)
 
     # Run by loading previous pkl file
     else:
-        with open(args.open,'rb') as f:
-            col = pkl.load(f)
-    
-        mapper = col.mapper
-        orbits = col.orbitslist
-        sections = col.sectionsarray
-        energies = col.energylist
-        zvcs = col.zvc_list
+        col = PoincareCollection.load(args.open)
     
     """ Show Results"""
     polar_axlabels = ["$r$","$\dot{r}$","$r$","$z$"]
     title = r'$\Phi(r,z) = \frac{1}{2} v_0^2 \ln{\left(r_c^2 + r^2 + \frac{z^2}{q^2}\right)} + \frac{L_z^2}{2r^2}$'
-    tom = Tomography(sections,orbits,zvcs,energies,mapper,title=title,axlabels=polar_axlabels)
+    tom = Tomography(col,title=title,axlabels=polar_axlabels)

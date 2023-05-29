@@ -109,25 +109,16 @@ if __name__ == "__main__":
         energies = np.linspace(args.Emin,args.Emax,args.N_E)
         sections, orbits, zvcs = mapper.section_collection(energies,xlim,args.N_orbits,args.N_points)
         
-        # Create PoincareCollection object for convenient pickling
+        # Create PoincareCollection object
         col = PoincareCollection(energies,orbits,sections,zvcs,mapper)
 
         if args.save is not None:
-            with open(args.save,'wb') as f:
-                pkl.dump(col,f)
+            col.save(args.save)
 
     # If a computation was done and saved previously, you can import it with the -open flag
     else:
-        with open(args.open,'rb') as f:
-            col = pkl.load(f)
-    
-        mapper = col.mapper
-        pot = mapper.pot
-        orbits = col.orbitslist
-        sections = col.sectionsarray
-        energies = col.energylist
-        zvcs = col.zvc_list
+        col = PoincareCollection.load(args.open)
     
     # The computed data (Poincaré sections & corresponding orbits) are visualized with a Tomography object (see API)
     ttl = "Rotating Logarithmic Potential\n$r_c={:.1f}, v_0={:.1f}, q={:.2f}, \omega={:.1f}$".format(args.rc,args.v0,args.q,args.omega)
-    tom = Tomography(sections,orbits,zvcs,energies,mapper,title=ttl)
+    tom = Tomography(col,title=ttl)
