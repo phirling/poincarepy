@@ -1,5 +1,5 @@
-from poincarepy import solver
-from poincarepy import potentials as pot
+from . import potentials as pot
+from . import solver
 import copy
 import numpy as np
 import scipy.optimize as scpopt
