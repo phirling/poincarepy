@@ -1,0 +1,2 @@
+# Exclude Jupyter Notebooks from language statistics (used as documentation and contain images so they appear as large)
+*.ipynb linguist-documentation
