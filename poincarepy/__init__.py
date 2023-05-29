@@ -8,6 +8,7 @@ import copy
 import numpy as np
 import scipy.optimize as scpopt
 from tqdm import tqdm
+import pickle as pkl
 
 def event_yplanecross(t,y):
         return y[1]
@@ -465,7 +466,8 @@ class PoincareCollection:
     (The total number of orbits in a collection is nb_energies x nb_orbits_per_E)
     """
     
-    def __init__(self,E_list,orbits_list,sections_list: np.ndarray,zvc_list: np.ndarray,mapper: PoincareMapper) -> None:
+    def __init__(self,E_list,orbits_list,sections_list: np.ndarray,zvc_list: np.ndarray,mapper: PoincareMapper,
+                 fname = "pcollection.pkl") -> None:
         if not (len(E_list) == len(orbits_list) == sections_list.shape[0]):
             raise ValueError("lists must be of the same length")
         self.energylist = E_list
@@ -475,6 +477,11 @@ class PoincareCollection:
         self.mapper = mapper
         self.nb_energies = len(E_list)
         self.nb_orbits_per_E = len(orbits_list[0])
+        self.fname = fname
+    
+    def save(self):
+        with open(self.fname,"wb") as f:
+            pkl.dump(self,f)
 
 
 class Tomography:
