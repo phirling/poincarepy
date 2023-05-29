@@ -1,5 +1,5 @@
-# PoincarePy - Visualize Poincaré Maps interactively
-PoincarePy is a Python module to compute Poincaré maps of 2D potentials and explore them interactively. The user can define a physical system by
+# PoincarePy - Visualize Surfaces of Section Interactively
+PoincarePy is a Python module to compute surfaces of section (or Poincaré maps) of 2D potentials and explore them interactively. The user can define a physical system by
 using and combining a set of predefined potentials, or by implementing new ones, which is made very simple.
 
 Installation
@@ -14,9 +14,15 @@ The install uses setuptools >=3.7. To install the package, simply clone the repo
 `python3 -m pip install [path/to/repo]`
 (preferably inside a virtual environment)
 
-How to use
+User Guide
 ----------------------
-The typical workflow is:
+### Documentation & Tutorial
+A general introduction as well as the full API documentation of the package can be found [here](https://poincarepy.readthedocs.io/en/latest/).
+To help you get started, a tutorial series of 4 notebooks can be found in `tutorial_notebooks` and will guide you through the main features of the package.
+A minimal guide is provided below.
+
+### Minimal Guide
+A typical workflow using `poincarepy` is:
 1. Create a potential. This can be one of the predefined potentials or a new custom one, as well as combinations of the latter. For a choice of parameters, it is useful to viszalize the resulting potential, e.g. in a notebook, in order to get an intuition about the allowed energies and the scales of the dynamical variables. For example, when creating a logarithmic potential, this could look like
 ```python
 import matplotlib.pyplot as plt
