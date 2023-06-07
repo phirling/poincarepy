@@ -1,4 +1,4 @@
-# PoincarePy - Visualize Surfaces of Section Interactively
+# PoincaréPy - Visualize Surfaces of Section Interactively
 PoincarePy is a Python module to compute surfaces of section (or Poincaré maps) of 2D potentials and explore them interactively. The user can define a physical system by
 using and combining a set of predefined potentials, or by implementing new ones, which is made very simple.
 

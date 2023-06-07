@@ -8,7 +8,7 @@ from .mapper import PoincareMapper
 class Tomography:
     """Tomographic visualisation of an ensemble of surfaces of section at different energies
 
-    Main visualization class. Using precalculated data (Poincaré sections at different energies), allows
+    Visualization class. Using precalculated data (Poincaré sections at different energies), allows
     the user to pan through the energy dimension in a tomography-like fashion and see how the phase space
     of the system (represented with a Poincaré section) changes in this dimension. One can click on a given
     orbit in the reduced phase space to see how it looks like in configuration space.

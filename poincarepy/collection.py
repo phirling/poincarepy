@@ -53,11 +53,27 @@ class PoincareCollection:
         self.nb_orbits_per_E = len(orbits_list[0])
     
     def save(self,fname = "pcollection.pkl"):
+        """Save PoincareCollection to a file
+
+        Parameters
+        ----------
+        fname : str
+            Name of the file to write
+        """
         with open(fname,"wb") as f:
             pkl.dump(self,f)
     
     @classmethod
     def load(cls,fname):
+        """Create PoincareCollection from saved file
+
+        Usage: collection = PoincareCollection.load([filename])
+
+        Parameters
+        ----------
+        fname : str
+            Name of the file to read
+        """
         with open(fname,"rb") as f:
             old = pkl.load(f)
         return cls(old.energylist,old.orbitslist,old.sectionsarray,old.zvc_list,old.mapper)

@@ -5,6 +5,7 @@ import numpy as np
 import scipy.optimize as scpopt
 from tqdm import tqdm
 
+# TODO: this can be done in a cleaner way
 def event_yplanecross(t,y):
         return y[1]
 event_yplanecross.direction = 1
