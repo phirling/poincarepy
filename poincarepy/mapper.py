@@ -1,4 +1,3 @@
-from . import potentials as pot
 from . import solver
 import copy
 import numpy as np
@@ -44,7 +43,7 @@ class PoincareMapper:
     dvx: float
         Finite difference step used for the second dynamical variable (vx,vr,.) in the jacobian computation
     """
-    def __init__(self,pot: pot.Potential,crossing_function = event_yplanecross,
+    def __init__(self,pot,crossing_function = event_yplanecross,
                  max_integ_time=200,dx=1e-8,dvx=1e-8) -> None:
         self.pot = pot
         self.maxtime = max_integ_time

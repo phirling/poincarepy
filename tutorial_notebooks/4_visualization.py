@@ -1,6 +1,8 @@
-import pickle as pkl
-from poincarepy import Tomography, PoincareCollection
+import poincarepy as pcp
 
-col = PoincareCollection.load("example_collection.pkl")
+# To visualize a saved PoincareCollection, simply load the file and
+# create a Tomography object from it!
 
-tom = Tomography(col,title="Test")
+col = pcp.PoincareCollection.load("example_collection.pkl")
+
+tom = pcp.Tomography(col,title="Test")
