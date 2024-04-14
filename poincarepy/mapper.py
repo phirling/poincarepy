@@ -9,6 +9,9 @@ def event_yplanecross(t,y):
         return y[1]
 event_yplanecross.direction = 1
 
+# Relative tolerance for RK integrator (global parameter)
+RTOL = 1.e-5
+
 class PoincareMapper:
     """Class that handles computations (orbit integration, map generation,..) based on a physical potential
     
@@ -75,7 +78,7 @@ class PoincareMapper:
             #raise ValueError("Attempted to map a point outside ZVC")
         else:
             y0 = [q[0],0.,q[1],np.sqrt(ED)]
-            res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1)
+            res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1,rtol=RTOL)
             return res['y_events'][0][-1][[0,2]]
     def jac(self,q,E,N=1):
         """2D-Jacobian matrix of the map() function
@@ -201,13 +204,14 @@ class PoincareMapper:
         else:
             y0 = [q[0],0.,q[1],np.sqrt(ED)]
             if N_points_orbit is not None:
-                res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1,dense_output=True)
+                res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1,dense_output=True,rtol=RTOL)
                 sol = res['sol']
                 ts = np.linspace(0,res['t'][-1],N_points_orbit)
                 orb = sol(ts)
                 return res['y_events'][0][1:,[0,2]].T, orb[0:2] # Exclude first event
             else:
-                res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1,t_eval=None)
+                print("hello")
+                res = solver.integrate_orbit(self.pot.RHS,(0.,self.maxtime),y0,events=self._evt,event_count_end=N+1,t_eval=None,rtol=RTOL)
                 return res['y_events'][0][1:,[0,2]].T, res['y'][0:2] # Exclude first event
 
     def integrate_orbit_full(self,y0,tf,N_points_orbit = 1000):
@@ -232,7 +236,7 @@ class PoincareMapper:
             The trajectory (x(t),y(t),vx(t),vy(t)) in phase space
         """
         t_eval = np.linspace(0,tf,N_points_orbit)
-        res = solver.integrate_orbit(self.pot.RHS,(0.,tf),y0,t_eval)
+        res = solver.integrate_orbit(self.pot.RHS,(0.,tf),y0,t_eval,rtol=RTOL)
         return res['y']
 
     def section(self,E,xlim,N_orbits,N_points,xdot=0.,auto_lim=True,N_points_orbit = 10000,Nsteps_lim=20,print_progress=False):
