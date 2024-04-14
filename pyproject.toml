@@ -21,4 +21,4 @@ classifiers = [
 "Homepage" = "https://github.com/hyperfeinstruktur/poincarepy"
 
 [tool.setuptools]
-packages = ["poincarepy"]
+packages = ["poincarepy","poincarepy.solver","poincarepy.potentials"]
